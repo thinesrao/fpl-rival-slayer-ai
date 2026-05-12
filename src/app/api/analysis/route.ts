@@ -84,6 +84,8 @@ export async function GET(req: NextRequest) {
       freeTransfers,
       shortlist,
       differentials: { userOnly: userOnlyEnriched, rivalOnly: rivalOnlyEnriched },
+      fixtures,
+      bs,
     });
 
     return NextResponse.json({

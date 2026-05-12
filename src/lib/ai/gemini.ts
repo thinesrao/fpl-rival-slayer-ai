@@ -7,6 +7,8 @@ import { GoogleGenAI, type GroundingMetadata } from "@google/genai";
 import { aiEnabled, env } from "@/lib/env";
 import { SYSTEM_INSTRUCTION, buildUserPrompt } from "./prompts";
 import type {
+  FplBootstrap,
+  FplFixture,
   ManagerSquad,
   OvertakeOdds,
   RivalContext,
@@ -175,6 +177,8 @@ export interface AskStrategistArgs {
     userOnly: Array<{ name: string; xPts: number }>;
     rivalOnly: Array<{ name: string; rival: string; xPts: number }>;
   };
+  fixtures: FplFixture[];
+  bs: FplBootstrap;
 }
 
 export async function askStrategist(args: AskStrategistArgs): Promise<AiResult> {
@@ -192,6 +196,8 @@ export async function askStrategist(args: AskStrategistArgs): Promise<AiResult> 
     freeTransfers: args.freeTransfers,
     shortlist: args.shortlist,
     differentials: args.differentials,
+    fixtures: args.fixtures,
+    bs: args.bs,
   });
 
   const model = env.GEMINI_MODEL;

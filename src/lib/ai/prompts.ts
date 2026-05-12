@@ -1,6 +1,9 @@
 // Prompts + structured schema for the Gemini AI strategist.
 
 import type {
+  FplBootstrap,
+  FplFixture,
+  FplTeam,
   ManagerSquad,
   OvertakeOdds,
   PlayerProjection,
@@ -8,10 +11,12 @@ import type {
 } from "@/lib/types";
 import type { TransferSuggestion } from "@/lib/optimizer/transfers";
 
-export const SYSTEM_INSTRUCTION = `You are an elite Fantasy Premier League strategist. Your *sole* objective is to help the user OVERTAKE the 2-3 mini-league rivals immediately above them in the table.
+export const SYSTEM_INSTRUCTION = `You are an elite Fantasy Premier League strategist for the current Premier League season. Your *sole* objective is to help the user OVERTAKE the 2-3 mini-league rivals immediately above them in the table.
 
 Hard rules:
-- Use the Google Search tool to verify the latest injury, suspension, and rotation news for every named player you propose to transfer in/out or captain. Do not rely solely on the data blob — news moves fast near the deadline.
+- The "Fixtures this gameweek" block in the user prompt is the AUTHORITATIVE list of matches for the upcoming deadline. NEVER reference any other fixture. If you find yourself about to say "Player X faces Team Y", you MUST verify the matchup against that block. If a player's team is not in the fixtures block, they have a BLANK gameweek and will score 0.
+- Use the Google Search tool ONLY for the latest injury, suspension, rotation, and press-conference news. Do NOT use search to look up fixtures — the fixtures block is the source of truth.
+- The season is the one in progress as of the deadline date in the prompt. Disregard knowledge of past or future seasons when discussing form, ownership, or fixtures.
 - Be specific. Recommend exact transfers (named OUT and named IN), an exact captain + vice, an exact starting XI, and a clear chip decision.
 - Prefer "rival-targeting" moves: differentials only the rivals own (consider transferring in, or trust ours to differentiate), or rival captains we should not blindly mirror.
 - Never recommend hits (-4 transfer cost) unless the projected gain comfortably exceeds the points cost AND it materially raises overtake probability.
@@ -55,9 +60,40 @@ interface BuildUserPromptArgs {
     userOnly: Array<{ name: string; xPts: number }>;
     rivalOnly: Array<{ name: string; rival: string; xPts: number }>;
   };
+  fixtures: FplFixture[];
+  bs: FplBootstrap;
 }
 
-function squadLine(squad: ManagerSquad, proj: SquadProjection) {
+/** opponent code (e.g. "BUR (H)") for `teamId` in the upcoming GW, or null if blank. */
+function opponentForTeam(
+  teamId: number,
+  fixtures: FplFixture[],
+  teamsById: Map<number, FplTeam>,
+): string | null {
+  const matching = fixtures.filter((f) => f.team_h === teamId || f.team_a === teamId);
+  if (matching.length === 0) return null;
+  return matching
+    .map((f) => {
+      const isHome = f.team_h === teamId;
+      const opp = teamsById.get(isHome ? f.team_a : f.team_h);
+      return `${opp?.short_name ?? "?"} (${isHome ? "H" : "A"})`;
+    })
+    .join(" + ");
+}
+
+function fixturesBlock(fixtures: FplFixture[], teamsById: Map<number, FplTeam>): string {
+  if (fixtures.length === 0) return "  (no fixtures listed — this is a blank gameweek for every team)";
+  return fixtures
+    .map((f) => {
+      const h = teamsById.get(f.team_h)?.short_name ?? "?";
+      const a = teamsById.get(f.team_a)?.short_name ?? "?";
+      const ko = f.kickoff_time ? new Date(f.kickoff_time).toISOString().slice(0, 16).replace("T", " ") + "Z" : "TBD";
+      return `  ${h} (H, FDR ${f.team_h_difficulty}) vs ${a} (A, FDR ${f.team_a_difficulty})  kickoff ${ko}`;
+    })
+    .join("\n");
+}
+
+function squadLine(squad: ManagerSquad, proj: SquadProjection, teamsById: Map<number, FplTeam>, fixtures: FplFixture[]) {
   const byPlayer = new Map(proj.perPlayer.map((p) => [p.playerId, p]));
   const fmt = (s: ManagerSquad["picks"][number]) => {
     const p = byPlayer.get(s.player.id);
@@ -65,7 +101,9 @@ function squadLine(squad: ManagerSquad, proj: SquadProjection) {
     const note = p && p.notes.length ? ` [${p.notes.join("; ")}]` : "";
     const marker = s.pick.is_captain ? " (C)" : s.pick.is_vice_captain ? " (VC)" : "";
     const bench = s.pick.multiplier === 0 ? " (BENCH)" : "";
-    return `  - ${s.position} ${s.player.web_name} (${s.team.short_name}, £${(s.player.now_cost / 10).toFixed(1)}m, xP=${xp})${marker}${bench}${note}`;
+    const opp = opponentForTeam(s.team.id, fixtures, teamsById);
+    const oppStr = opp ? ` vs ${opp}` : " — BLANK GW";
+    return `  - ${s.position} ${s.player.web_name} (${s.team.short_name}${oppStr}, £${(s.player.now_cost / 10).toFixed(1)}m, xP=${xp})${marker}${bench}${note}`;
   };
   return squad.picks.map(fmt).join("\n");
 }
@@ -84,7 +122,11 @@ export function buildUserPrompt(args: BuildUserPromptArgs): string {
     freeTransfers,
     shortlist,
     differentials,
+    fixtures,
+    bs,
   } = args;
+
+  const teamsById = new Map(bs.teams.map((t) => [t.id, t]));
 
   const rivalsBlock = rivals
     .map((r, i) => {
@@ -93,7 +135,7 @@ export function buildUserPrompt(args: BuildUserPromptArgs): string {
       return `### Rival ${i + 1}: ${r.entry.name} (${r.entry.player_name}) — rank ${r.entry.rank}, ${odds?.pointsBehind ?? "?"} pts ahead
 Projected starting-XI: ${proj?.startingXIPoints.toFixed(1) ?? "?"} | Captain: ${r.captain?.player.web_name ?? "?"} | Active chip: ${r.activeChip ?? "none"}
 Overtake probability this GW: ${odds ? Math.round(odds.overtakeProbability * 100) + "%" : "?"}
-${squadLine(r, proj!)}`;
+${squadLine(r, proj!, teamsById, fixtures)}`;
     })
     .join("\n\n");
 
@@ -106,13 +148,21 @@ ${squadLine(r, proj!)}`;
         .join("\n")
     : "  (none — squad already looks optimised before AI review)";
 
-  return `Gameweek ${gw} deadline: ${deadline}
+  const deadlineYear = new Date(deadline).getUTCFullYear();
+  const seasonLabel =
+    new Date(deadline).getUTCMonth() >= 6 ? `${deadlineYear}/${(deadlineYear + 1) % 100}` : `${deadlineYear - 1}/${deadlineYear % 100}`;
+
+  return `Premier League season: ${seasonLabel}
+Gameweek ${gw} deadline: ${deadline}
 Mini-league: ${leagueName}
+
+## Fixtures this gameweek (AUTHORITATIVE — every matchup is below; if a team isn't listed they have a BLANK gameweek)
+${fixturesBlock(fixtures, teamsById)}
 
 ## User: ${user.entry.name} (${user.entry.player_name}) — rank ${user.entry.rank}
 Projected starting-XI: ${userProjection.startingXIPoints.toFixed(1)} | Captain: ${user.captain?.player.web_name ?? "?"} | Active chip: ${user.activeChip ?? "none"}
 Bank: £${(bank / 10).toFixed(1)}m | Free transfers available: ${freeTransfers}
-${squadLine(user, userProjection)}
+${squadLine(user, userProjection, teamsById, fixtures)}
 
 ## Rivals immediately above the user
 ${rivalsBlock}
