@@ -50,27 +50,84 @@ function client(): GoogleGenAI {
   return cachedClient;
 }
 
+function findBalancedObjects(text: string): string[] {
+  // Walk the string string-aware, returning every top-level `{...}` slice.
+  const results: string[] = [];
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escape = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (inString) {
+      if (ch === "\\") escape = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === "{") {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (ch === "}") {
+      if (depth > 0) depth--;
+      if (depth === 0 && start !== -1) {
+        results.push(text.slice(start, i + 1));
+        start = -1;
+      }
+    }
+  }
+  return results;
+}
+
+function tryParse(candidate: string): unknown | null {
+  try {
+    return JSON.parse(candidate);
+  } catch {
+    // Try simple repairs: smart quotes, trailing commas.
+    const repaired = candidate
+      .replace(/,(\s*[}\]])/g, "$1")
+      .replace(/[“”]/g, '"')
+      .replace(/[‘’]/g, "'");
+    try {
+      return JSON.parse(repaired);
+    } catch {
+      return null;
+    }
+  }
+}
+
 function extractJsonBlock(text: string): unknown {
-  // Prefer fenced ```json block.
-  const fence = text.match(/```json\s*([\s\S]*?)```/i) ?? text.match(/```\s*([\s\S]*?)```/i);
-  if (fence) {
-    try {
-      return JSON.parse(fence[1]);
-    } catch {
-      // fall through
-    }
+  const trimmed = text.trim();
+  // 1) Direct parse (model returned strict JSON).
+  const direct = tryParse(trimmed);
+  if (direct !== null) return direct;
+
+  // 2) Every fenced block, in order — try each body.
+  const fenceRe = /```(?:json|JSON)?\s*([\s\S]*?)```/g;
+  const fenceMatches = [...text.matchAll(fenceRe)];
+  for (const m of fenceMatches) {
+    const parsed = tryParse(m[1].trim());
+    if (parsed !== null) return parsed;
   }
-  // Fall back to the largest balanced { ... } block.
-  const first = text.indexOf("{");
-  const last = text.lastIndexOf("}");
-  if (first !== -1 && last !== -1 && last > first) {
-    try {
-      return JSON.parse(text.slice(first, last + 1));
-    } catch {
-      // fall through
-    }
+
+  // 3) Balanced { ... } objects, largest first (the schema object is usually the biggest).
+  const candidates = findBalancedObjects(text).sort((a, b) => b.length - a.length);
+  for (const c of candidates) {
+    const parsed = tryParse(c);
+    if (parsed !== null) return parsed;
   }
-  throw new Error("Gemini response did not contain a parseable JSON object");
+
+  const sample = trimmed.length > 400 ? `${trimmed.slice(0, 400)}…[+${trimmed.length - 400}b]` : trimmed;
+  const err = new Error(`Gemini response did not contain a parseable JSON object. Sample: ${sample}`);
+  (err as Error & { rawText?: string }).rawText = text;
+  throw err;
 }
 
 function coerceRecommendation(parsed: unknown): AiRecommendation {
@@ -143,13 +200,31 @@ export async function askStrategist(args: AskStrategistArgs): Promise<AiResult> 
     contents: userPrompt,
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
-      temperature: 0.4,
+      temperature: 0.3,
       tools: [{ googleSearch: {} }],
     },
   });
 
   const text = response.text ?? "";
-  const parsed = extractJsonBlock(text);
+  let parsed: unknown;
+  try {
+    parsed = extractJsonBlock(text);
+  } catch (firstErr) {
+    // Reformat-only retry: no tools, low temperature, strict JSON prompt.
+    // We still keep the original grounding metadata (the search was already done).
+    const reformat = await ai.models.generateContent({
+      model,
+      contents: `The following text was meant to be a JSON object matching a schema, but failed to parse. Re-emit it as a single valid JSON object. Output NOTHING except the JSON — no prose, no markdown fences, no comments. If a field is missing, fill with a sensible default ("", [], "medium", "none"). Preserve every concrete recommendation (transfers, captain, citations) from the source text.\n\nSOURCE:\n${text.slice(0, 12000)}`,
+      config: { temperature: 0.0, responseMimeType: "application/json" },
+    });
+    try {
+      parsed = extractJsonBlock(reformat.text ?? "");
+    } catch {
+      // Surface the original error (with raw sample) so the route can return it.
+      throw firstErr;
+    }
+  }
+
   const recommendation = coerceRecommendation(parsed);
   const grounding = extractGrounding(response.candidates?.[0]?.groundingMetadata);
 

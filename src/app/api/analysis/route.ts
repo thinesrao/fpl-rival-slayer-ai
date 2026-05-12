@@ -102,7 +102,11 @@ export async function GET(req: NextRequest) {
       });
     }
     const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: "internal_error", message }, { status: 500 });
+    const rawText = (err as { rawText?: string }).rawText;
+    return NextResponse.json(
+      rawText ? { error: "internal_error", message, rawText } : { error: "internal_error", message },
+      { status: 500 },
+    );
   }
 }
 
