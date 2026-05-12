@@ -202,6 +202,11 @@ export async function askStrategist(args: AskStrategistArgs): Promise<AiResult> 
       systemInstruction: SYSTEM_INSTRUCTION,
       temperature: 0.3,
       tools: [{ googleSearch: {} }],
+      // Cap thinking so flash actually returns a final answer — with full
+      // automatic thinking + googleSearch we occasionally got finishReason=STOP
+      // with thoughts only and no usable text part.
+      thinkingConfig: { thinkingBudget: 2048 },
+      maxOutputTokens: 8192,
     },
   });
 
