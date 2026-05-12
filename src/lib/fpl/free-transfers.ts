@@ -3,13 +3,14 @@
 // doesn't expose this directly, so we derive it from the rules:
 //
 //   - You enter GW1 with 1 free transfer.
-//   - Each GW you receive +1 FT, banked up to a maximum of 5.
-//   - Each transfer you make in a GW deducts 1 FT. Beyond your FT count you
-//     pay -4 per transfer (`event_transfers_cost > 0`).
-//   - Wildcard played in GW N: unlimited transfers; FT resets to 1 entering N+1.
-//   - Free Hit played in GW N: squad reverts; FT carries through as if the GW
-//     had no transfers (FT entering N+1 == FT entering N, then +1).
-//   - Bench Boost / Triple Captain do not affect FT.
+//   - Each normal GW the count is updated as:
+//        next = min(5, max(0, current - transfers_used) + 1)
+//   - Wildcard played in GW N: count resets to 1 entering GW N+1 (the weekly
+//     +1 is consumed by the WC, no extra accumulation).
+//   - Free Hit played in GW N: the gameweek is "frozen" for transfer-banking
+//     purposes — the squad reverts and you do NOT receive the weekly +1.
+//     Count entering GW N+1 == count entering GW N.
+//   - Bench Boost / Triple Captain do not affect transfers; treated as normal.
 
 import type { FplEntryHistory } from "@/lib/fpl/client";
 
@@ -32,20 +33,19 @@ export function computeFreeTransfers(history: FplEntryHistory): FreeTransfersRes
   for (const g of played) {
     const chip = chipByGw.get(g.event) ?? null;
     if (chip === "wildcard") {
-      // WC: unlimited transfers don't deduct from bank, FT resets to 1 for next GW.
+      // WC: unlimited transfers, no FT deduction, count resets to 1 next GW.
       ft = 1;
     } else if (chip === "freehit") {
-      // FH: temporary squad — FT count carries through as if no GW happened,
-      // and we still tick the weekly +1.
-      ft = Math.min(FT_MAX, ft + 1);
+      // FH: the GW is bypassed for FT-banking. Count entering next GW is
+      // unchanged from entering this GW. No +1, no deduction.
+      // (ft stays the same)
     } else {
-      // Normal GW: -event_transfers (floored at 0), then +1 for the next week.
+      // Normal GW (or BB/TC which behave normally for FT).
       ft = Math.min(FT_MAX, Math.max(0, ft - g.event_transfers) + 1);
     }
     trace.push({ gw: g.event, transfers: g.event_transfers, chip, ftAfter: ft });
   }
 
-  // Find the GW we are about to plan for: max completed event + 1, or 1 if none.
   const lastPlayed = played.length ? played[played.length - 1].event : 0;
   return { freeTransfers: ft, enteringGw: lastPlayed + 1, history: trace };
 }
