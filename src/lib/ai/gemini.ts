@@ -32,6 +32,13 @@ export interface AiRecommendation {
     reasoning: string;
   };
   differentials_to_exploit: string[];
+  multi_gw_plan: Array<{
+    gw: number;
+    intent: string;
+    transfers: Array<{ out: string; in: string; reason: string; hit_cost?: number }>;
+    captain: string;
+    notes: string;
+  }>;
   news_citations: Array<{ player: string; summary: string; source_url?: string }>;
   confidence: "low" | "medium" | "high";
 }
@@ -147,6 +154,9 @@ function coerceRecommendation(parsed: unknown): AiRecommendation {
     differentials_to_exploit: Array.isArray(p.differentials_to_exploit)
       ? (p.differentials_to_exploit as string[])
       : [],
+    multi_gw_plan: Array.isArray(p.multi_gw_plan)
+      ? (p.multi_gw_plan as AiRecommendation["multi_gw_plan"])
+      : [],
     news_citations: Array.isArray(p.news_citations)
       ? (p.news_citations as AiRecommendation["news_citations"])
       : [],
@@ -178,6 +188,7 @@ export interface AskStrategistArgs {
     rivalOnly: Array<{ name: string; rival: string; xPts: number }>;
   };
   fixtures: FplFixture[];
+  horizonFixtures: Array<{ gw: number; fixtures: FplFixture[] }>;
   bs: FplBootstrap;
 }
 
@@ -197,6 +208,7 @@ export async function askStrategist(args: AskStrategistArgs): Promise<AiResult> 
     shortlist: args.shortlist,
     differentials: args.differentials,
     fixtures: args.fixtures,
+    horizonFixtures: args.horizonFixtures,
     bs: args.bs,
   });
 

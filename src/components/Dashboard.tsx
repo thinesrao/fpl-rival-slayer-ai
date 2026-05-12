@@ -29,6 +29,8 @@ interface AnalysisResponse {
     rivalOnly: Array<{ name: string; rival: string; xPts: number }>;
   };
   shortlist: TransferSuggestion[];
+  freeTransfers: number;
+  bank: number;
   ai: AiResult;
 }
 
@@ -224,7 +226,11 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
               <AlertDescription>{(analysisQuery.error as Error).message}</AlertDescription>
             </Alert>
           ) : ai ? (
-            <RecommendationsPanel ai={ai} />
+            <RecommendationsPanel
+              ai={ai}
+              freeTransfers={analysisQuery.data?.freeTransfers}
+              bank={analysisQuery.data?.bank}
+            />
           ) : (
             <Card>
               <CardHeader>

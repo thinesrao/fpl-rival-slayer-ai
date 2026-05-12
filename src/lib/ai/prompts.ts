@@ -19,6 +19,8 @@ Hard rules:
 - The season is the one in progress as of the deadline date in the prompt. Disregard knowledge of past or future seasons when discussing form, ownership, or fixtures.
 - Be specific. Recommend exact transfers (named OUT and named IN), an exact captain + vice, an exact starting XI, and a clear chip decision.
 - Prefer "rival-targeting" moves: differentials only the rivals own (consider transferring in, or trust ours to differentiate), or rival captains we should not blindly mirror.
+- HONOUR THE FREE TRANSFER COUNT. The "Free transfers available" number is exact. Each transfer in your "transfers" list beyond that count incurs a -4 hit (set hit_cost on those transfers). Never silently exceed the FT count without explicit hit_cost values. If you only need 0-1 transfers, don't manufacture extra just to spend FT.
+- Pre-plan the next 2-3 gameweeks using the multi-GW fixture run-in. Populate \`multi_gw_plan\` with one entry per upcoming GW (including this one) describing the intended squad direction, any planned transfers, captain candidate, and rationale. Identify squad rotation that lines up players with the best fixtures over the horizon, not just this week.
 - Never recommend hits (-4 transfer cost) unless the projected gain comfortably exceeds the points cost AND it materially raises overtake probability.
 - Output a SINGLE JSON object that strictly matches the schema below. No prose, no commentary, no markdown. Begin your response with \`{\` and end with \`}\`. Do not wrap it in code fences. Do not add any text before \`{\` or after the final \`}\`. Every string value must be plain text (no inner JSON, no markdown).
 
@@ -31,7 +33,7 @@ type Output = {
     in: string;                           // FPL web_name
     reason: string;
     rival_targeted?: string;              // rival manager name this swap targets
-    hit_cost?: number;                    // 0 if free, 4 if -4 hit, etc.
+    hit_cost?: number;                    // 0 if free, 4 if -4 hit, 8 if -8, etc.
   }>;
   captain: { pick: string; vice: string; reasoning: string };
   starting_xi: string[];                  // 11 web_names, GK then DEF then MID then FWD
@@ -40,6 +42,18 @@ type Output = {
     reasoning: string;
   };
   differentials_to_exploit: string[];     // 1-5 web_names
+  multi_gw_plan: Array<{
+    gw: number;                           // gameweek number
+    intent: string;                       // 1-sentence plan for that GW
+    transfers: Array<{                    // forward-planned transfers (empty if none)
+      out: string;
+      in: string;
+      reason: string;
+      hit_cost?: number;
+    }>;
+    captain: string;                      // intended captain web_name for that GW
+    notes: string;                        // anything else worth flagging
+  }>;
   news_citations: Array<{ player: string; summary: string; source_url?: string }>;
   confidence: "low" | "medium" | "high";
 };`;
@@ -61,6 +75,7 @@ interface BuildUserPromptArgs {
     rivalOnly: Array<{ name: string; rival: string; xPts: number }>;
   };
   fixtures: FplFixture[];
+  horizonFixtures: Array<{ gw: number; fixtures: FplFixture[] }>;
   bs: FplBootstrap;
 }
 
@@ -123,10 +138,32 @@ export function buildUserPrompt(args: BuildUserPromptArgs): string {
     shortlist,
     differentials,
     fixtures,
+    horizonFixtures,
     bs,
   } = args;
 
   const teamsById = new Map(bs.teams.map((t) => [t.id, t]));
+
+  // Build a per-team run-in across the next 3 GWs so the AI can pre-plan rotations.
+  const horizonByTeam = new Map<number, string[]>();
+  for (const team of bs.teams) horizonByTeam.set(team.id, []);
+  for (const { gw, fixtures: fx } of horizonFixtures) {
+    for (const team of bs.teams) {
+      const opp = opponentForTeam(team.id, fx, teamsById);
+      const fdr = fx.find((f) => f.team_h === team.id || f.team_a === team.id);
+      const fdrVal = fdr ? (fdr.team_h === team.id ? fdr.team_h_difficulty : fdr.team_a_difficulty) : null;
+      horizonByTeam
+        .get(team.id)!
+        .push(`GW${gw}:${opp ?? "BLANK"}${fdrVal ? `(FDR${fdrVal})` : ""}`);
+    }
+  }
+
+  const userTeams = new Set(user.picks.map((s) => s.team.id));
+  const rivalTeams = new Set(rivals.flatMap((r) => r.picks.map((s) => s.team.id)));
+  const relevantTeams = [...new Set([...userTeams, ...rivalTeams])].sort((a, b) => a - b);
+  const horizonBlock = relevantTeams
+    .map((id) => `  ${teamsById.get(id)?.short_name}: ${horizonByTeam.get(id)!.join("  ")}`)
+    .join("\n");
 
   const rivalsBlock = rivals
     .map((r, i) => {
@@ -152,6 +189,8 @@ ${squadLine(r, proj!, teamsById, fixtures)}`;
   const seasonLabel =
     new Date(deadline).getUTCMonth() >= 6 ? `${deadlineYear}/${(deadlineYear + 1) % 100}` : `${deadlineYear - 1}/${deadlineYear % 100}`;
 
+  const horizonGws = horizonFixtures.map((h) => h.gw);
+
   return `Premier League season: ${seasonLabel}
 Gameweek ${gw} deadline: ${deadline}
 Mini-league: ${leagueName}
@@ -159,9 +198,13 @@ Mini-league: ${leagueName}
 ## Fixtures this gameweek (AUTHORITATIVE — every matchup is below; if a team isn't listed they have a BLANK gameweek)
 ${fixturesBlock(fixtures, teamsById)}
 
+## Fixture run-in for the next ${horizonGws.length} GWs (${horizonGws.join(", ")}) — per team (your + rival teams)
+Use this for planning rotations and lining up players with favourable runs. "BLANK" means no fixture that GW.
+${horizonBlock}
+
 ## User: ${user.entry.name} (${user.entry.player_name}) — rank ${user.entry.rank}
 Projected starting-XI: ${userProjection.startingXIPoints.toFixed(1)} | Captain: ${user.captain?.player.web_name ?? "?"} | Active chip: ${user.activeChip ?? "none"}
-Bank: £${(bank / 10).toFixed(1)}m | Free transfers available: ${freeTransfers}
+Bank: £${(bank / 10).toFixed(1)}m | Free transfers available NOW: ${freeTransfers} (each transfer beyond this incurs a -4 hit)
 ${squadLine(user, userProjection, teamsById, fixtures)}
 
 ## Rivals immediately above the user

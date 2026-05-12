@@ -79,6 +79,27 @@ export function getEntry(teamId: number): Promise<FplEntry> {
   return fplFetch<FplEntry>(`/entry/${teamId}/`, CACHE_LIVE);
 }
 
+export interface FplEntryHistory {
+  current: Array<{
+    event: number;
+    points: number;
+    total_points: number;
+    rank: number;
+    overall_rank: number;
+    bank: number;
+    value: number;
+    event_transfers: number;
+    event_transfers_cost: number;
+    points_on_bench: number;
+  }>;
+  past: Array<{ season_name: string; total_points: number; rank: number }>;
+  chips: Array<{ name: string; time: string; event: number }>;
+}
+
+export function getEntryHistory(teamId: number): Promise<FplEntryHistory> {
+  return fplFetch<FplEntryHistory>(`/entry/${teamId}/history/`, CACHE_LIVE);
+}
+
 export function getPicks(teamId: number, gw: number): Promise<FplPicksResponse> {
   return fplFetch<FplPicksResponse>(`/entry/${teamId}/event/${gw}/picks/`, CACHE_LIVE);
 }

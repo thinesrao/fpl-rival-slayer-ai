@@ -4,8 +4,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { aiEnabled } from "@/lib/env";
-import { FplError, getEntry, getFixtures, currentEvent } from "@/lib/fpl/client";
+import { FplError, getEntry, getEntryHistory, getFixtures, currentEvent } from "@/lib/fpl/client";
 import { buildRivalContext, computeDifferentials } from "@/lib/fpl/rivals";
+import { computeFreeTransfers } from "@/lib/fpl/free-transfers";
 import { buildProjections } from "@/lib/projections";
 import { projectPlayer } from "@/lib/projections/model";
 import { suggestTransfers } from "@/lib/optimizer/transfers";
@@ -41,10 +42,20 @@ export async function GET(req: NextRequest) {
       parsed.data.teamId,
       parsed.data.n,
     );
-    const [projections, fixtures, entry] = await Promise.all([
+    // Pull current-GW fixtures + a multi-GW horizon (next 3 GWs) so the AI
+    // can pre-plan, plus history to derive the exact free-transfer count.
+    const HORIZON_GWS = 3;
+    const horizon = bs.events
+      .filter((e) => e.id >= targetGw)
+      .slice(0, HORIZON_GWS)
+      .map((e) => e.id);
+
+    const [projections, fixtures, horizonFixtures, entry, entryHistory] = await Promise.all([
       buildProjections(context, bs, targetGw),
       getFixtures(targetGw),
+      Promise.all(horizon.map((g) => getFixtures(g).then((fx) => ({ gw: g, fixtures: fx })))),
       getEntry(parsed.data.teamId).catch(() => null),
+      getEntryHistory(parsed.data.teamId).catch(() => null),
     ]);
 
     const differentials = computeDifferentials(context);
@@ -68,7 +79,7 @@ export async function GET(req: NextRequest) {
     }));
 
     const bank = entry?.last_deadline_bank ?? 0;
-    const freeTransfers = 1; // FPL doesn't expose this cleanly via public API; default to 1.
+    const freeTransfers = entryHistory ? computeFreeTransfers(entryHistory).freeTransfers : 1;
     const shortlist = suggestTransfers(context.user, bank, bs, fixtures, targetGw);
 
     const target = bs.events.find((e) => e.id === targetGw) ?? currentEvent(bs);
@@ -85,6 +96,7 @@ export async function GET(req: NextRequest) {
       shortlist,
       differentials: { userOnly: userOnlyEnriched, rivalOnly: rivalOnlyEnriched },
       fixtures,
+      horizonFixtures,
       bs,
     });
 
@@ -95,6 +107,8 @@ export async function GET(req: NextRequest) {
       projections,
       differentials: { userOnly: userOnlyEnriched, rivalOnly: rivalOnlyEnriched },
       shortlist,
+      freeTransfers,
+      bank,
       ai,
     });
   } catch (err) {
