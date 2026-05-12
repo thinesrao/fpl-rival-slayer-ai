@@ -205,7 +205,31 @@ export async function askStrategist(args: AskStrategistArgs): Promise<AiResult> 
     },
   });
 
-  const text = response.text ?? "";
+  // Robustly extract text from .text getter and, failing that, from candidate parts.
+  // `response.text` sometimes returns "" when the model produced only function/tool
+  // outputs or when a single part is missing the `text` field even though others have it.
+  const candidate = response.candidates?.[0];
+  const partsText = (candidate?.content?.parts ?? [])
+    .map((p) => ("text" in p && typeof p.text === "string" ? p.text : ""))
+    .join("");
+  const text = response.text || partsText || "";
+  const finishReason = candidate?.finishReason ?? "UNKNOWN";
+
+  if (!text) {
+    // Model returned nothing usable — surface the actual cause.
+    const err = new Error(
+      `Gemini returned no text content (finishReason=${finishReason}). ` +
+        `This usually means a safety/recitation block or a quota issue. ` +
+        `Try lowering the rival count or switching GEMINI_MODEL to gemini-2.5-pro.`,
+    );
+    (err as Error & { rawText?: string }).rawText = JSON.stringify(
+      { finishReason, safetyRatings: candidate?.safetyRatings, promptFeedback: response.promptFeedback },
+      null,
+      2,
+    );
+    throw err;
+  }
+
   let parsed: unknown;
   try {
     parsed = extractJsonBlock(text);
