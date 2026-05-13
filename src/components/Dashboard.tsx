@@ -15,6 +15,7 @@ import { ProjectionsChart } from "@/components/ProjectionsChart";
 import { OvertakeMeter } from "@/components/OvertakeMeter";
 import { RecommendationsPanel } from "@/components/RecommendationsPanel";
 import { IntelPanel } from "@/components/IntelPanel";
+import { RetrospectivePanel } from "@/components/RetrospectivePanel";
 import type { OvertakeOdds, RivalContext, SquadProjection } from "@/lib/types";
 import type { AiResult } from "@/lib/ai/gemini";
 import type { TransferSuggestion } from "@/lib/optimizer/transfers";
@@ -205,6 +206,7 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
           <TabsTrigger value="differentials">Differentials</TabsTrigger>
           <TabsTrigger value="projections">Projections</TabsTrigger>
           <TabsTrigger value="ai">AI Coach</TabsTrigger>
+          <TabsTrigger value="retrospective">Retrospective</TabsTrigger>
         </TabsList>
 
         <TabsContent value="squads" className="mt-4">
@@ -234,6 +236,10 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
             rivalProjections={projections.rivals}
           />
           <OvertakeMeter odds={projections.overtake} />
+        </TabsContent>
+
+        <TabsContent value="retrospective" className="mt-4">
+          <RetrospectivePanel teamId={teamId} leagueId={leagueId} />
         </TabsContent>
 
         <TabsContent value="ai" className="mt-4">

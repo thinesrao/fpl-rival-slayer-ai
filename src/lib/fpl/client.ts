@@ -139,6 +139,41 @@ export function getElementSummary(playerId: number): Promise<FplElementSummary> 
   return fplFetch<FplElementSummary>(`/element-summary/${playerId}/`, CACHE_ELEMENT_SUMMARY);
 }
 
+export interface FplLiveElement {
+  id: number;
+  stats: {
+    minutes: number;
+    goals_scored: number;
+    assists: number;
+    clean_sheets: number;
+    goals_conceded: number;
+    own_goals: number;
+    penalties_saved: number;
+    penalties_missed: number;
+    yellow_cards: number;
+    red_cards: number;
+    saves: number;
+    bonus: number;
+    bps: number;
+    influence: string;
+    creativity: string;
+    threat: string;
+    ict_index: string;
+    total_points: number;
+    in_dreamteam: boolean;
+  };
+}
+
+export interface FplLive {
+  elements: FplLiveElement[];
+}
+
+const CACHE_LIVE_GW: CacheOpts = { revalidate: 60, tags: ["fpl-live-gw"] }; // refreshes every minute
+
+export function getLive(gw: number): Promise<FplLive> {
+  return fplFetch<FplLive>(`/event/${gw}/live/`, CACHE_LIVE_GW);
+}
+
 // Convenience selectors -------------------------------------------------------
 
 export function currentEvent(bs: FplBootstrap) {
@@ -165,4 +200,22 @@ export function targetEvent(bs: FplBootstrap) {
 
 export function previousEvent(bs: FplBootstrap) {
   return bs.events.find((e) => e.is_previous) ?? null;
+}
+
+export function previousFinishedEvent(bs: FplBootstrap) {
+  // The most recent fully-finished GW (data settled), used for retrospectives.
+  return [...bs.events].reverse().find((e) => e.finished) ?? null;
+}
+
+export function gameweekStatus(bs: FplBootstrap) {
+  const cur = currentEvent(bs);
+  const inProgress = cur.is_current && !cur.finished;
+  const deadlinePassed = Date.now() >= new Date(cur.deadline_time).getTime();
+  return {
+    gw: cur.id,
+    deadlineIso: cur.deadline_time,
+    inProgress,
+    deadlinePassed,
+    finished: cur.finished,
+  };
 }
