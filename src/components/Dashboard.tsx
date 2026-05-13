@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, RefreshCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,6 +32,8 @@ interface AnalysisResponse {
   freeTransfers: number;
   bank: number;
   ai: AiResult;
+  cachedAt?: string;
+  cacheStatus?: "hit" | "miss" | "refreshed";
 }
 
 interface ProjectionsResponse {
@@ -82,13 +84,27 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
     queryFn: () => fetchJson<ProjectionsResponse>(`/api/projections?teamId=${teamId}&leagueId=${leagueId}`),
   });
 
+  const forceRefreshRef = useRef(false);
+  const [refreshing, setRefreshing] = useState(false);
   const analysisQuery = useQuery({
     queryKey: ["analysis", teamId, leagueId],
-    queryFn: () => fetchJson<AnalysisResponse>(`/api/analysis?teamId=${teamId}&leagueId=${leagueId}`),
+    queryFn: () => {
+      const refresh = forceRefreshRef.current ? "&refresh=1" : "";
+      return fetchJson<AnalysisResponse>(`/api/analysis?teamId=${teamId}&leagueId=${leagueId}${refresh}`);
+    },
     enabled: aiEnabled && !!projectionsQuery.data,
     retry: 0,
     staleTime: 5 * 60 * 1000,
   });
+
+  const refetchAnalysis = (force: boolean) => {
+    forceRefreshRef.current = force;
+    setRefreshing(force);
+    analysisQuery.refetch().finally(() => {
+      forceRefreshRef.current = false;
+      setRefreshing(false);
+    });
+  };
 
   useEffect(() => {
     if (analysisQuery.error) toast.error((analysisQuery.error as Error).message);
@@ -150,7 +166,7 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
             aria-label="Refresh"
             onClick={() => {
               projectionsQuery.refetch();
-              analysisQuery.refetch();
+              refetchAnalysis(false);
             }}
           >
             <RefreshCcw className="h-4 w-4" />
@@ -230,6 +246,10 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
               ai={ai}
               freeTransfers={analysisQuery.data?.freeTransfers}
               bank={analysisQuery.data?.bank}
+              cachedAt={analysisQuery.data?.cachedAt}
+              cacheStatus={analysisQuery.data?.cacheStatus}
+              refreshing={refreshing}
+              onRefresh={() => refetchAnalysis(true)}
             />
           ) : (
             <Card>
@@ -238,7 +258,7 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
                 <CardDescription>Click refresh to query Gemini with the latest news.</CardDescription>
               </CardHeader>
               <CardContent>
-                <Button onClick={() => analysisQuery.refetch()}>Run analysis</Button>
+                <Button onClick={() => refetchAnalysis(false)}>Run analysis</Button>
               </CardContent>
             </Card>
           )}

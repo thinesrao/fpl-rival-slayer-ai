@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { CalendarDays, ChevronDown, ChevronUp, ExternalLink, Newspaper, Search, ShieldAlert, Sparkles, Trophy } from "lucide-react";
+import { CalendarDays, ChevronDown, ChevronUp, ExternalLink, Newspaper, RefreshCcw, Search, ShieldAlert, Sparkles, Trophy } from "lucide-react";
 import type { AiResult } from "@/lib/ai/gemini";
 
 const CONFIDENCE_TONE = {
@@ -15,13 +15,56 @@ const CONFIDENCE_TONE = {
   high: "success" as const,
 };
 
-export function RecommendationsPanel({ ai, freeTransfers, bank }: { ai: AiResult; freeTransfers?: number; bank?: number }) {
+function formatAge(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 60_000) return "just now";
+  const mins = Math.floor(ms / 60_000);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+interface Props {
+  ai: AiResult;
+  freeTransfers?: number;
+  bank?: number;
+  cachedAt?: string;
+  cacheStatus?: "hit" | "miss" | "refreshed";
+  refreshing?: boolean;
+  onRefresh?: () => void;
+}
+
+export function RecommendationsPanel({ ai, freeTransfers, bank, cachedAt, cacheStatus, refreshing, onRefresh }: Props) {
   const [expanded, setExpanded] = useState(false);
   const rec = ai.recommendation;
   const totalHit = rec.transfers.reduce((acc, t) => acc + (t.hit_cost ?? 0), 0);
 
   return (
     <div className="space-y-4">
+      {cachedAt && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+          <span>
+            {cacheStatus === "hit" ? "Cached" : cacheStatus === "refreshed" ? "Refreshed" : "Generated"}{" "}
+            {formatAge(cachedAt)}
+            {cacheStatus === "hit" && " — re-run with latest news for an up-to-date verdict."}
+          </span>
+          {onRefresh && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRefresh}
+              disabled={refreshing}
+              className="h-7 text-xs"
+            >
+              <RefreshCcw className={`mr-1.5 h-3 w-3 ${refreshing ? "animate-spin" : ""}`} />
+              {refreshing ? "Re-running…" : "Re-run with latest news"}
+            </Button>
+          )}
+        </div>
+      )}
+
       <Alert variant="success">
         <Sparkles className="h-4 w-4" />
         <AlertTitle className="flex items-center gap-2">

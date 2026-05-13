@@ -11,6 +11,8 @@ import { buildProjections } from "@/lib/projections";
 import { projectPlayer } from "@/lib/projections/model";
 import { suggestTransfers } from "@/lib/optimizer/transfers";
 import { askStrategist } from "@/lib/ai/gemini";
+import { readAnalysis, writeAnalysis, writeSnapshot } from "@/lib/store/cache";
+import { storeEnabled } from "@/lib/store/redis";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,6 +22,7 @@ const Query = z.object({
   teamId: z.coerce.number().int().positive(),
   leagueId: z.coerce.number().int().positive(),
   n: z.coerce.number().int().min(1).max(5).default(3),
+  refresh: z.coerce.boolean().default(false),
 });
 
 export async function GET(req: NextRequest) {
@@ -42,6 +45,18 @@ export async function GET(req: NextRequest) {
       parsed.data.teamId,
       parsed.data.n,
     );
+
+    // Cache lookup — skip when ?refresh=1.
+    if (!parsed.data.refresh) {
+      const cached = await readAnalysis(parsed.data.teamId, parsed.data.leagueId, targetGw);
+      if (cached) {
+        return NextResponse.json({
+          ...(cached.payload as object),
+          cachedAt: cached.cachedAt,
+          cacheStatus: "hit" as const,
+        });
+      }
+    }
     // Pull current-GW fixtures + a multi-GW horizon (next 3 GWs) so the AI
     // can pre-plan, plus history to derive the exact free-transfer count.
     const HORIZON_GWS = 3;
@@ -100,7 +115,7 @@ export async function GET(req: NextRequest) {
       bs,
     });
 
-    return NextResponse.json({
+    const payload = {
       context,
       targetGw,
       deadline: target.deadline_time,
@@ -110,6 +125,27 @@ export async function GET(req: NextRequest) {
       freeTransfers,
       bank,
       ai,
+    };
+
+    // Persist to cache + snapshot (best-effort; never blocks the response on failure).
+    let cachedAt = new Date().toISOString();
+    if (storeEnabled) {
+      const stored = await writeAnalysis(
+        parsed.data.teamId,
+        parsed.data.leagueId,
+        targetGw,
+        payload,
+        target.deadline_time,
+      );
+      cachedAt = stored.cachedAt;
+      // Fire-and-forget snapshot — used later by the Retrospective tab.
+      writeSnapshot(parsed.data.teamId, parsed.data.leagueId, targetGw, payload).catch(() => {});
+    }
+
+    return NextResponse.json({
+      ...payload,
+      cachedAt,
+      cacheStatus: parsed.data.refresh ? ("refreshed" as const) : ("miss" as const),
     });
   } catch (err) {
     if (err instanceof FplError) {
