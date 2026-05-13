@@ -190,6 +190,8 @@ export interface AskStrategistArgs {
   fixtures: FplFixture[];
   horizonFixtures: Array<{ gw: number; fixtures: FplFixture[] }>;
   bs: FplBootstrap;
+  eo: import("@/lib/intel/effective-ownership").EoMap;
+  priceMoves: import("@/lib/intel/price-changes").PriceMoveReport;
 }
 
 export async function askStrategist(args: AskStrategistArgs): Promise<AiResult> {
@@ -210,6 +212,8 @@ export async function askStrategist(args: AskStrategistArgs): Promise<AiResult> 
     fixtures: args.fixtures,
     horizonFixtures: args.horizonFixtures,
     bs: args.bs,
+    eo: args.eo,
+    priceMoves: args.priceMoves,
   });
 
   const model = env.GEMINI_MODEL;

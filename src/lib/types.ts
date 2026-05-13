@@ -53,6 +53,10 @@ export interface FplElement {
   starts_per_90: number;
   ict_index: string;
   bps: number;
+  transfers_in_event: number;
+  transfers_out_event: number;
+  cost_change_event: number; // tenths of £m moved this GW (positive = rise, negative = drop)
+  cost_change_start: number; // tenths of £m moved since season start
 }
 
 export interface FplEvent {

@@ -13,6 +13,8 @@ import { suggestTransfers } from "@/lib/optimizer/transfers";
 import { askStrategist } from "@/lib/ai/gemini";
 import { readAnalysis, writeAnalysis, writeSnapshot } from "@/lib/store/cache";
 import { storeEnabled } from "@/lib/store/redis";
+import { computeEffectiveOwnership } from "@/lib/intel/effective-ownership";
+import { computePriceMoves } from "@/lib/intel/price-changes";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -96,6 +98,8 @@ export async function GET(req: NextRequest) {
     const bank = entry?.last_deadline_bank ?? 0;
     const freeTransfers = entryHistory ? computeFreeTransfers(entryHistory).freeTransfers : 1;
     const shortlist = suggestTransfers(context.user, bank, bs, fixtures, targetGw);
+    const eo = computeEffectiveOwnership(context, bs);
+    const priceMoves = computePriceMoves(bs);
 
     const target = bs.events.find((e) => e.id === targetGw) ?? currentEvent(bs);
 
@@ -113,6 +117,8 @@ export async function GET(req: NextRequest) {
       fixtures,
       horizonFixtures,
       bs,
+      eo,
+      priceMoves,
     });
 
     const payload = {
@@ -125,6 +131,8 @@ export async function GET(req: NextRequest) {
       freeTransfers,
       bank,
       ai,
+      eo,
+      priceMoves,
     };
 
     // Persist to cache + snapshot (best-effort; never blocks the response on failure).

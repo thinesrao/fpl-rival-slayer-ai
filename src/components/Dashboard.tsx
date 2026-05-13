@@ -14,9 +14,12 @@ import { DifferentialsCard } from "@/components/DifferentialsCard";
 import { ProjectionsChart } from "@/components/ProjectionsChart";
 import { OvertakeMeter } from "@/components/OvertakeMeter";
 import { RecommendationsPanel } from "@/components/RecommendationsPanel";
+import { IntelPanel } from "@/components/IntelPanel";
 import type { OvertakeOdds, RivalContext, SquadProjection } from "@/lib/types";
 import type { AiResult } from "@/lib/ai/gemini";
 import type { TransferSuggestion } from "@/lib/optimizer/transfers";
+import type { PlayerEo } from "@/lib/intel/effective-ownership";
+import type { PriceMoveReport } from "@/lib/intel/price-changes";
 import { toast } from "sonner";
 
 interface AnalysisResponse {
@@ -34,12 +37,16 @@ interface AnalysisResponse {
   ai: AiResult;
   cachedAt?: string;
   cacheStatus?: "hit" | "miss" | "refreshed";
+  eo?: Record<number, PlayerEo>;
+  priceMoves?: PriceMoveReport;
 }
 
 interface ProjectionsResponse {
   context: RivalContext;
   targetGw: number;
   projections: { gw: number; user: SquadProjection; rivals: SquadProjection[]; overtake: OvertakeOdds[] };
+  eo?: Record<number, PlayerEo>;
+  priceMoves?: PriceMoveReport;
 }
 
 interface DifferentialsExt {
@@ -138,6 +145,8 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
   const diff: DifferentialsExt =
     analysisQuery.data?.differentials ??
     ({ userOnly: [], rivalOnly: [] } as DifferentialsExt);
+  const eo = analysisQuery.data?.eo ?? data.eo;
+  const priceMoves = analysisQuery.data?.priceMoves ?? data.priceMoves;
 
   const closestRival = projections.overtake[0];
 
@@ -204,15 +213,17 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
             userProjection={projections.user}
             rivals={ctx.rivals}
             rivalProjections={projections.rivals}
+            eo={eo}
           />
         </TabsContent>
 
-        <TabsContent value="differentials" className="mt-4">
+        <TabsContent value="differentials" className="mt-4 space-y-4">
           {analysisQuery.isLoading && aiEnabled ? (
             <Skeleton className="h-40 w-full" />
           ) : (
             <DifferentialsCard userOnly={diff.userOnly} rivalOnly={diff.rivalOnly} />
           )}
+          {eo && priceMoves && <IntelPanel eo={eo} priceMoves={priceMoves} />}
         </TabsContent>
 
         <TabsContent value="projections" className="mt-4 grid gap-4 lg:grid-cols-2">

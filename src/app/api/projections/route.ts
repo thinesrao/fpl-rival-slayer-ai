@@ -3,6 +3,8 @@ import { z } from "zod";
 import { FplError } from "@/lib/fpl/client";
 import { buildRivalContext } from "@/lib/fpl/rivals";
 import { buildProjections } from "@/lib/projections";
+import { computeEffectiveOwnership } from "@/lib/intel/effective-ownership";
+import { computePriceMoves } from "@/lib/intel/price-changes";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,7 +29,9 @@ export async function GET(req: NextRequest) {
       parsed.data.n,
     );
     const projections = await buildProjections(context, bs, targetGw);
-    return NextResponse.json({ context, projections, targetGw });
+    const eo = computeEffectiveOwnership(context, bs);
+    const priceMoves = computePriceMoves(bs);
+    return NextResponse.json({ context, projections, targetGw, eo, priceMoves });
   } catch (err) {
     if (err instanceof FplError) {
       return NextResponse.json({ error: "fpl_error", status: err.status, message: err.message }, {

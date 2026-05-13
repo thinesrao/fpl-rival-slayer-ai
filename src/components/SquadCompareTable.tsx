@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { ManagerSquad, PlayerProjection, Position, SquadProjection, SquadSlot } from "@/lib/types";
+import type { PlayerEo } from "@/lib/intel/effective-ownership";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -12,6 +13,7 @@ interface Props {
   userProjection: SquadProjection;
   rivals: ManagerSquad[];
   rivalProjections: SquadProjection[];
+  eo?: Record<number, PlayerEo>;
 }
 
 function projByPlayer(proj: SquadProjection) {
@@ -55,10 +57,12 @@ function pairByPosition(userSlots: SquadSlot[], rivalSlots: SquadSlot[]) {
 function PlayerSide({
   slot,
   proj,
+  eo,
   highlight,
 }: {
   slot: SquadSlot | undefined;
   proj: PlayerProjection | undefined;
+  eo: PlayerEo | undefined;
   highlight: "advantage" | "threat" | "shared" | "none";
 }) {
   if (!slot) {
@@ -71,6 +75,9 @@ function PlayerSide({
     shared: "",
     none: "",
   }[highlight];
+  // EO badge tone: green when truly differential (≤25%), amber when template (≥75%).
+  const eoTone =
+    !eo ? null : eo.eoPct >= 75 ? "warning" : eo.eoPct <= 25 ? "success" : "outline";
   return (
     <div className={cn("flex min-h-[52px] flex-col gap-0.5 p-2", benched && "opacity-60", bg)}>
       <div className="flex flex-wrap items-center gap-1">
@@ -85,6 +92,11 @@ function PlayerSide({
       <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
         <span>{slot.team.short_name}</span>
         {proj && <span className="font-mono">xP {proj.xPoints.toFixed(1)}</span>}
+        {eoTone && (
+          <Badge variant={eoTone} className="px-1 py-0 text-[9px] leading-none">
+            EO {eo!.eoPct.toFixed(0)}%
+          </Badge>
+        )}
         {benched && <span className="text-[10px] uppercase">bench</span>}
         {proj && proj.injuryRisk >= 0.4 && (
           <Badge variant="destructive" className="px-1 py-0 text-[9px] leading-none">
@@ -96,7 +108,7 @@ function PlayerSide({
   );
 }
 
-export function SquadCompareTable({ user, userProjection, rivals, rivalProjections }: Props) {
+export function SquadCompareTable({ user, userProjection, rivals, rivalProjections, eo }: Props) {
   const [idx, setIdx] = useState(0);
   if (rivals.length === 0 || rivalProjections.length === 0) {
     return (
@@ -207,6 +219,7 @@ export function SquadCompareTable({ user, userProjection, rivals, rivalProjectio
                       key={i}
                       slot={row.user}
                       proj={row.user && userMap.get(row.user.player.id)}
+                      eo={row.user && eo ? eo[row.user.player.id] : undefined}
                       highlight={row.shared ? "shared" : row.user ? "advantage" : "none"}
                     />
                   ))}
@@ -217,6 +230,7 @@ export function SquadCompareTable({ user, userProjection, rivals, rivalProjectio
                       key={i}
                       slot={row.rival}
                       proj={row.rival && rivalMap.get(row.rival.player.id)}
+                      eo={row.rival && eo ? eo[row.rival.player.id] : undefined}
                       highlight={row.shared ? "shared" : row.rival ? "threat" : "none"}
                     />
                   ))}

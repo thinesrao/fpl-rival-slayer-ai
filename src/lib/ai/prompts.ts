@@ -10,6 +10,8 @@ import type {
   SquadProjection,
 } from "@/lib/types";
 import type { TransferSuggestion } from "@/lib/optimizer/transfers";
+import type { EoMap } from "@/lib/intel/effective-ownership";
+import type { PriceMoveReport } from "@/lib/intel/price-changes";
 
 export const SYSTEM_INSTRUCTION = `You are an elite Fantasy Premier League strategist for the current Premier League season. Your *sole* objective is to help the user OVERTAKE the 2-3 mini-league rivals immediately above them in the table.
 
@@ -77,6 +79,8 @@ interface BuildUserPromptArgs {
   fixtures: FplFixture[];
   horizonFixtures: Array<{ gw: number; fixtures: FplFixture[] }>;
   bs: FplBootstrap;
+  eo: EoMap;
+  priceMoves: PriceMoveReport;
 }
 
 /** opponent code (e.g. "BUR (H)") for `teamId` in the upcoming GW, or null if blank. */
@@ -140,6 +144,8 @@ export function buildUserPrompt(args: BuildUserPromptArgs): string {
     fixtures,
     horizonFixtures,
     bs,
+    eo,
+    priceMoves,
   } = args;
 
   const teamsById = new Map(bs.teams.map((t) => [t.id, t]));
@@ -216,6 +222,55 @@ ${shortlistBlock}
 ## Differentials
 User-only players: ${differentials.userOnly.map((d) => `${d.name} (xP ${d.xPts.toFixed(1)})`).join(", ") || "none"}
 Rival-only players to consider stealing: ${differentials.rivalOnly.map((d) => `${d.name} via ${d.rival} (xP ${d.xPts.toFixed(1)})`).join(", ") || "none"}
+
+## Effective ownership in this mini-league (your squad vs rivals)
+EO% = (managers owning a player) / (1 + ${rivals.length} rivals). captainEO% adds the captain/triple-captain multiplier — anyone above 100% is a likely rival captain.
+User squad EO snapshot (starters only):
+${user.starters
+  .map((s) => {
+    const e = eo[s.player.id];
+    return `  - ${s.player.web_name}: EO ${e ? e.eoPct.toFixed(0) : "?"}% · captainEO ${e ? e.captainEoPct.toFixed(0) : "?"}% · global ${e ? e.globalPct.toFixed(1) : "?"}%`;
+  })
+  .join("\n")}
+Rival captain threats (players rivals own/captain but YOU do not — high captainEO with userMultiplier=0):
+${
+  Object.values(eo)
+    .filter((p) => !p.ownedByUser && p.captainEoPct > 0)
+    .sort((a, b) => b.captainEoPct - a.captainEoPct)
+    .slice(0, 8)
+    .map((p) => `  - ${p.webName}: captainEO ${p.captainEoPct.toFixed(0)}% (you do not own — direct points loss if they haul)`)
+    .join("\n") || "  (none — every threat is mirrored in your squad)"
+}
+Captaincy guideline:
+- captainEO ≥ 70%: this is the template captain. Mirror unless you have a high-conviction differential.
+- captainEO 30-70%: tactical choice — pick the one that maximises your overtake probability.
+- captainEO < 30% and your projection beats the template: a real differential captain play — call it out explicitly.
+
+## Price-change intel (next FPL price change run)
+Players LIKELY TO RISE tonight (top 10):
+${
+  priceMoves.rising
+    .slice(0, 10)
+    .map((m) => `  - ${m.webName}: net ${m.netTransfers > 0 ? "+" : ""}${m.netTransfers.toLocaleString()} (${m.pctOfPool.toFixed(2)}% pool, ${m.confidence} confidence)`)
+    .join("\n") || "  (no high-confidence rises projected)"
+}
+Players LIKELY TO DROP tonight (top 10):
+${
+  priceMoves.falling
+    .slice(0, 10)
+    .map((m) => `  - ${m.webName}: net ${m.netTransfers.toLocaleString()} (${m.pctOfPool.toFixed(2)}% pool, ${m.confidence} confidence)`)
+    .join("\n") || "  (no high-confidence drops projected)"
+}
+USER-SQUAD price warnings (any player in the user squad in the above lists):
+${(() => {
+  const userIds = new Set(user.picks.map((s) => s.player.id));
+  const hits = [
+    ...priceMoves.rising.filter((m) => userIds.has(m.playerId)).map((m) => `  - ${m.webName} likely to RISE (banked profit if held)`),
+    ...priceMoves.falling.filter((m) => userIds.has(m.playerId)).map((m) => `  - ${m.webName} likely to DROP (sell before deadline to preserve team value, but only if you were already planning to)`),
+  ];
+  return hits.length ? hits.join("\n") : "  (none — squad value stable tonight)";
+})()}
+Use price intel ONLY to break ties (e.g. between two equally-good transfer-in targets, pick the one about to rise; consider timing of moves around the price-change run). NEVER chase a price rise at the cost of a worse footballing decision.
 
 ## Your task
 1. Search the web for the latest pre-deadline news on every named player you reference (especially captain candidates and transfer targets). Look for press conferences, manager quotes, training reports, and confirmed lineups when available.
