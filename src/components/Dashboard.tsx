@@ -17,6 +17,7 @@ import { RecommendationsPanel } from "@/components/RecommendationsPanel";
 import { IntelPanel } from "@/components/IntelPanel";
 import { RetrospectivePanel } from "@/components/RetrospectivePanel";
 import { LivePanel } from "@/components/LivePanel";
+import { NotificationToggle } from "@/components/NotificationToggle";
 import type { OvertakeOdds, RivalContext, SquadProjection } from "@/lib/types";
 import type { AiResult } from "@/lib/ai/gemini";
 import type { TransferSuggestion } from "@/lib/optimizer/transfers";
@@ -166,22 +167,25 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
             <span className="font-medium text-foreground">{ctx.user.entry.total}</span> pts
           </p>
         </div>
-        <div className="flex items-center gap-3 rounded-lg border bg-card/70 px-4 py-2 text-sm">
-          <div className="text-right">
-            <div className="text-xs uppercase tracking-wider text-muted-foreground">GW {projections.gw} deadline</div>
-            <div className="font-mono text-base">{countdown ?? "—"}</div>
+        <div className="flex flex-wrap items-center gap-3">
+          <NotificationToggle teamId={teamId} />
+          <div className="flex items-center gap-3 rounded-lg border bg-card/70 px-4 py-2 text-sm">
+            <div className="text-right">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground">GW {projections.gw} deadline</div>
+              <div className="font-mono text-base">{countdown ?? "—"}</div>
+            </div>
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="Refresh"
+              onClick={() => {
+                projectionsQuery.refetch();
+                refetchAnalysis(false);
+              }}
+            >
+              <RefreshCcw className="h-4 w-4" />
+            </Button>
           </div>
-          <Button
-            variant="outline"
-            size="icon"
-            aria-label="Refresh"
-            onClick={() => {
-              projectionsQuery.refetch();
-              refetchAnalysis(false);
-            }}
-          >
-            <RefreshCcw className="h-4 w-4" />
-          </Button>
         </div>
       </div>
 
