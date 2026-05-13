@@ -1,0 +1,16 @@
+{
+  "name": "FPL Rival Slayer",
+  "short_name": "Rival Slayer",
+  "description": "Beat the 2-3 FPL rivals immediately above you in your mini-league with AI-grounded news, EO intel, and live tracking.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#16a34a",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
