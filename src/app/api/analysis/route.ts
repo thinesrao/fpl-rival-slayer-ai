@@ -4,12 +4,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { aiEnabled } from "@/lib/env";
-import { FplError, getEntry, getFixtures, currentEvent } from "@/lib/fpl/client";
+import { FplError, getEntry, getEntryHistory, getFixtures, currentEvent } from "@/lib/fpl/client";
 import { buildRivalContext, computeDifferentials } from "@/lib/fpl/rivals";
+import { computeFreeTransfers } from "@/lib/fpl/free-transfers";
 import { buildProjections } from "@/lib/projections";
 import { projectPlayer } from "@/lib/projections/model";
 import { suggestTransfers } from "@/lib/optimizer/transfers";
 import { askStrategist } from "@/lib/ai/gemini";
+import { readAnalysis, writeAnalysis, writeSnapshot } from "@/lib/store/cache";
+import { storeEnabled } from "@/lib/store/redis";
+import { computeEffectiveOwnership } from "@/lib/intel/effective-ownership";
+import { computePriceMoves } from "@/lib/intel/price-changes";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +24,7 @@ const Query = z.object({
   teamId: z.coerce.number().int().positive(),
   leagueId: z.coerce.number().int().positive(),
   n: z.coerce.number().int().min(1).max(5).default(3),
+  refresh: z.coerce.boolean().default(false),
 });
 
 export async function GET(req: NextRequest) {
@@ -41,10 +47,32 @@ export async function GET(req: NextRequest) {
       parsed.data.teamId,
       parsed.data.n,
     );
-    const [projections, fixtures, entry] = await Promise.all([
+
+    // Cache lookup — skip when ?refresh=1.
+    if (!parsed.data.refresh) {
+      const cached = await readAnalysis(parsed.data.teamId, parsed.data.leagueId, targetGw);
+      if (cached) {
+        return NextResponse.json({
+          ...(cached.payload as object),
+          cachedAt: cached.cachedAt,
+          cacheStatus: "hit" as const,
+        });
+      }
+    }
+    // Pull current-GW fixtures + a multi-GW horizon (next 3 GWs) so the AI
+    // can pre-plan, plus history to derive the exact free-transfer count.
+    const HORIZON_GWS = 3;
+    const horizon = bs.events
+      .filter((e) => e.id >= targetGw)
+      .slice(0, HORIZON_GWS)
+      .map((e) => e.id);
+
+    const [projections, fixtures, horizonFixtures, entry, entryHistory] = await Promise.all([
       buildProjections(context, bs, targetGw),
       getFixtures(targetGw),
+      Promise.all(horizon.map((g) => getFixtures(g).then((fx) => ({ gw: g, fixtures: fx })))),
       getEntry(parsed.data.teamId).catch(() => null),
+      getEntryHistory(parsed.data.teamId).catch(() => null),
     ]);
 
     const differentials = computeDifferentials(context);
@@ -68,8 +96,10 @@ export async function GET(req: NextRequest) {
     }));
 
     const bank = entry?.last_deadline_bank ?? 0;
-    const freeTransfers = 1; // FPL doesn't expose this cleanly via public API; default to 1.
+    const freeTransfers = entryHistory ? computeFreeTransfers(entryHistory).freeTransfers : 1;
     const shortlist = suggestTransfers(context.user, bank, bs, fixtures, targetGw);
+    const eo = computeEffectiveOwnership(context, bs);
+    const priceMoves = computePriceMoves(bs);
 
     const target = bs.events.find((e) => e.id === targetGw) ?? currentEvent(bs);
 
@@ -84,16 +114,46 @@ export async function GET(req: NextRequest) {
       freeTransfers,
       shortlist,
       differentials: { userOnly: userOnlyEnriched, rivalOnly: rivalOnlyEnriched },
+      fixtures,
+      horizonFixtures,
+      bs,
+      eo,
+      priceMoves,
     });
 
-    return NextResponse.json({
+    const payload = {
       context,
       targetGw,
       deadline: target.deadline_time,
       projections,
       differentials: { userOnly: userOnlyEnriched, rivalOnly: rivalOnlyEnriched },
       shortlist,
+      freeTransfers,
+      bank,
       ai,
+      eo,
+      priceMoves,
+    };
+
+    // Persist to cache + snapshot (best-effort; never blocks the response on failure).
+    let cachedAt = new Date().toISOString();
+    if (storeEnabled) {
+      const stored = await writeAnalysis(
+        parsed.data.teamId,
+        parsed.data.leagueId,
+        targetGw,
+        payload,
+        target.deadline_time,
+      );
+      cachedAt = stored.cachedAt;
+      // Fire-and-forget snapshot — used later by the Retrospective tab.
+      writeSnapshot(parsed.data.teamId, parsed.data.leagueId, targetGw, payload).catch(() => {});
+    }
+
+    return NextResponse.json({
+      ...payload,
+      cachedAt,
+      cacheStatus: parsed.data.refresh ? ("refreshed" as const) : ("miss" as const),
     });
   } catch (err) {
     if (err instanceof FplError) {
@@ -102,7 +162,11 @@ export async function GET(req: NextRequest) {
       });
     }
     const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: "internal_error", message }, { status: 500 });
+    const rawText = (err as { rawText?: string }).rawText;
+    return NextResponse.json(
+      rawText ? { error: "internal_error", message, rawText } : { error: "internal_error", message },
+      { status: 500 },
+    );
   }
 }
 

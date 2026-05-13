@@ -1,6 +1,8 @@
 "use client";
 
-import type { ManagerSquad, PlayerProjection, Position, SquadProjection } from "@/lib/types";
+import { useState } from "react";
+import type { ManagerSquad, PlayerProjection, Position, SquadProjection, SquadSlot } from "@/lib/types";
+import type { PlayerEo } from "@/lib/intel/effective-ownership";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -11,50 +13,94 @@ interface Props {
   userProjection: SquadProjection;
   rivals: ManagerSquad[];
   rivalProjections: SquadProjection[];
+  eo?: Record<number, PlayerEo>;
 }
 
 function projByPlayer(proj: SquadProjection) {
   return new Map(proj.perPlayer.map((p) => [p.playerId, p]));
 }
 
-function slotsByPosition(squad: ManagerSquad, pos: Position) {
-  return squad.picks
-    .filter((s) => s.position === pos)
-    .sort((a, b) => a.pick.position - b.pick.position);
+function bySlotOrder(a: SquadSlot, b: SquadSlot) {
+  return a.pick.position - b.pick.position;
 }
 
-function PlayerCell({
-  name,
+/** Per-position pairing: lay out shared players first (aligned rows), then
+ *  user-only differentials, then rival-only differentials. This keeps the
+ *  side-by-side mental model intact while making differentials obvious. */
+function pairByPosition(userSlots: SquadSlot[], rivalSlots: SquadSlot[]) {
+  const rivalById = new Map(rivalSlots.map((s) => [s.player.id, s]));
+  const userById = new Map(userSlots.map((s) => [s.player.id, s]));
+
+  const shared: Array<{ user: SquadSlot; rival: SquadSlot }> = [];
+  const userOnly: SquadSlot[] = [];
+  const rivalOnly: SquadSlot[] = [];
+
+  for (const u of userSlots) {
+    const match = rivalById.get(u.player.id);
+    if (match) shared.push({ user: u, rival: match });
+    else userOnly.push(u);
+  }
+  for (const r of rivalSlots) {
+    if (!userById.has(r.player.id)) rivalOnly.push(r);
+  }
+
+  const rows: Array<{ user?: SquadSlot; rival?: SquadSlot; shared: boolean }> = [
+    ...shared.map((p) => ({ user: p.user, rival: p.rival, shared: true })),
+  ];
+  const diffCount = Math.max(userOnly.length, rivalOnly.length);
+  for (let i = 0; i < diffCount; i++) {
+    rows.push({ user: userOnly[i], rival: rivalOnly[i], shared: false });
+  }
+  return rows;
+}
+
+function PlayerSide({
+  slot,
   proj,
-  isCaptain,
-  isVice,
-  benched,
-  team,
+  eo,
+  highlight,
 }: {
-  name: string;
+  slot: SquadSlot | undefined;
   proj: PlayerProjection | undefined;
-  isCaptain: boolean;
-  isVice: boolean;
-  benched: boolean;
-  team: string;
+  eo: PlayerEo | undefined;
+  highlight: "advantage" | "threat" | "shared" | "none";
 }) {
+  if (!slot) {
+    return <div className="min-h-[52px] p-2 text-xs text-muted-foreground/40">—</div>;
+  }
+  const benched = slot.pick.multiplier === 0;
+  const bg = {
+    advantage: "bg-success/10",
+    threat: "bg-destructive/10",
+    shared: "",
+    none: "",
+  }[highlight];
+  // EO badge tone: green when truly differential (≤25%), amber when template (≥75%).
+  const eoTone =
+    !eo ? null : eo.eoPct >= 75 ? "warning" : eo.eoPct <= 25 ? "success" : "outline";
   return (
-    <div className={cn("flex flex-col gap-0.5 rounded-md p-2", benched ? "opacity-50" : "")}>
-      <div className="flex items-center gap-1">
-        <span className="truncate text-sm font-medium">{name}</span>
-        {isCaptain && (
-          <Badge className="px-1 py-0 text-[10px]" variant="success">C</Badge>
+    <div className={cn("flex min-h-[52px] flex-col gap-0.5 p-2", benched && "opacity-60", bg)}>
+      <div className="flex flex-wrap items-center gap-1">
+        <span className="truncate text-sm font-medium leading-tight">{slot.player.web_name}</span>
+        {slot.pick.is_captain && (
+          <Badge variant="success" className="px-1 py-0 text-[10px] leading-none">C</Badge>
         )}
-        {isVice && (
-          <Badge className="px-1 py-0 text-[10px]" variant="secondary">V</Badge>
+        {slot.pick.is_vice_captain && (
+          <Badge variant="secondary" className="px-1 py-0 text-[10px] leading-none">V</Badge>
         )}
       </div>
-      <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-        <span>{team}</span>
-        {proj && <span>xP {proj.xPoints.toFixed(1)}</span>}
-        {proj && proj.injuryRisk > 0.25 && (
-          <Badge variant="destructive" className="px-1 py-0 text-[10px]">
-            {Math.round(proj.injuryRisk * 100)}% injury
+      <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+        <span>{slot.team.short_name}</span>
+        {proj && <span className="font-mono">xP {proj.xPoints.toFixed(1)}</span>}
+        {eoTone && (
+          <Badge variant={eoTone} className="px-1 py-0 text-[9px] leading-none">
+            EO {eo!.eoPct.toFixed(0)}%
+          </Badge>
+        )}
+        {benched && <span className="text-[10px] uppercase">bench</span>}
+        {proj && proj.injuryRisk >= 0.4 && (
+          <Badge variant="destructive" className="px-1 py-0 text-[9px] leading-none">
+            {Math.round(proj.injuryRisk * 100)}% inj
           </Badge>
         )}
       </div>
@@ -62,73 +108,138 @@ function PlayerCell({
   );
 }
 
-export function SquadCompareTable({ user, userProjection, rivals, rivalProjections }: Props) {
+export function SquadCompareTable({ user, userProjection, rivals, rivalProjections, eo }: Props) {
+  const [idx, setIdx] = useState(0);
+  if (rivals.length === 0 || rivalProjections.length === 0) {
+    return (
+      <div className="rounded-xl border bg-card p-6 text-sm text-muted-foreground">
+        No rivals to compare against.
+      </div>
+    );
+  }
+  const safeIdx = Math.min(idx, rivals.length - 1);
+  const rival = rivals[safeIdx];
+  const rivalProj = rivalProjections[safeIdx];
+
   const userMap = projByPlayer(userProjection);
-  const rivalMaps = rivalProjections.map(projByPlayer);
-  const cols = [user, ...rivals];
-  const projMaps = [userMap, ...rivalMaps];
+  const rivalMap = projByPlayer(rivalProj);
+
+  const xPDelta = userProjection.startingXIPoints - rivalProj.startingXIPoints;
+  const pointsBehind = Math.max(0, rival.entry.total - user.entry.total);
 
   return (
-    <div className="overflow-x-auto rounded-xl border bg-card">
-      <table className="w-full min-w-[720px]">
-        <thead>
-          <tr className="border-b text-left text-xs uppercase text-muted-foreground">
-            <th className="px-4 py-3">Position</th>
-            {cols.map((c, i) => (
-              <th key={c.entry.id} className="px-3 py-3">
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-sm font-semibold text-foreground">
-                    {i === 0 ? "You" : `Rival #${i}`}
-                  </span>
-                  <span className="truncate text-xs font-normal normal-case text-muted-foreground">
-                    {c.entry.name} · rank {c.entry.rank}
-                  </span>
+    <div className="space-y-3">
+      {/* Rival selector */}
+      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+        {rivals.map((r, i) => {
+          const behind = Math.max(0, r.entry.total - user.entry.total);
+          const selected = i === safeIdx;
+          return (
+            <button
+              key={r.entry.id}
+              type="button"
+              onClick={() => setIdx(i)}
+              className={cn(
+                "flex shrink-0 flex-col items-start rounded-lg border px-3 py-2 text-left text-xs transition-colors",
+                selected ? "border-primary bg-primary/15" : "bg-card hover:bg-accent",
+              )}
+            >
+              <span className={cn("font-semibold", selected && "text-primary")}>vs {r.entry.name}</span>
+              <span className="text-muted-foreground">
+                rank {r.entry.rank} · {behind > 0 ? `+${behind} pts ahead` : `${-behind} pts behind`}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Twin header — always visible, drives the 2-column grid below. */}
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded-lg border bg-card p-3">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">You</div>
+          <div className="truncate text-sm font-semibold">{user.entry.name}</div>
+          <div className="text-[11px] text-muted-foreground">
+            rank {user.entry.rank} · {user.entry.total} pts
+          </div>
+          <div className="mt-1 text-sm">
+            Projected XI: <span className="font-mono font-semibold">{userProjection.startingXIPoints.toFixed(1)}</span>
+          </div>
+        </div>
+        <div className="rounded-lg border bg-card p-3">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Rival #{safeIdx + 1}</span>
+            {pointsBehind > 0 && (
+              <Badge variant="outline" className="px-1.5 py-0 text-[9px] leading-none">
+                +{pointsBehind} pts
+              </Badge>
+            )}
+          </div>
+          <div className="truncate text-sm font-semibold">{rival.entry.name}</div>
+          <div className="text-[11px] text-muted-foreground">
+            rank {rival.entry.rank} · {rival.entry.total} pts
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-sm">
+            <span>
+              Projected XI: <span className="font-mono font-semibold">{rivalProj.startingXIPoints.toFixed(1)}</span>
+            </span>
+            <Badge variant={xPDelta >= 0 ? "success" : "destructive"} className="px-1.5 py-0 text-[10px] leading-none">
+              {xPDelta >= 0 ? "+" : ""}
+              {xPDelta.toFixed(1)} xP
+            </Badge>
+          </div>
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[11px] text-muted-foreground">
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-2 w-2 rounded-sm bg-success/40" /> your differential
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-2 w-2 rounded-sm bg-destructive/40" /> their threat
+        </span>
+      </div>
+
+      {/* Per-position pair table */}
+      <div className="space-y-2">
+        {POSITIONS.map((pos) => {
+          const userSlots = user.picks.filter((s) => s.position === pos).sort(bySlotOrder);
+          const rivalSlots = rival.picks.filter((s) => s.position === pos).sort(bySlotOrder);
+          const rows = pairByPosition(userSlots, rivalSlots);
+          if (rows.length === 0) return null;
+          return (
+            <div key={pos} className="overflow-hidden rounded-lg border bg-card">
+              <div className="bg-muted/50 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                {pos}
+              </div>
+              <div className="grid grid-cols-2 divide-x">
+                <div className="divide-y">
+                  {rows.map((row, i) => (
+                    <PlayerSide
+                      key={i}
+                      slot={row.user}
+                      proj={row.user && userMap.get(row.user.player.id)}
+                      eo={row.user && eo ? eo[row.user.player.id] : undefined}
+                      highlight={row.shared ? "shared" : row.user ? "advantage" : "none"}
+                    />
+                  ))}
                 </div>
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {POSITIONS.map((pos) => {
-            const maxRows = Math.max(...cols.map((c) => slotsByPosition(c, pos).length));
-            return Array.from({ length: maxRows }).map((_, rowIdx) => (
-              <tr key={`${pos}-${rowIdx}`} className="border-b last:border-0">
-                {rowIdx === 0 && (
-                  <td rowSpan={maxRows} className="border-r px-4 py-2 align-top text-xs font-semibold text-muted-foreground">
-                    {pos}
-                  </td>
-                )}
-                {cols.map((c, colIdx) => {
-                  const slots = slotsByPosition(c, pos);
-                  const slot = slots[rowIdx];
-                  if (!slot) return <td key={colIdx} className="px-3 py-2" />;
-                  const proj = projMaps[colIdx].get(slot.player.id);
-                  return (
-                    <td key={colIdx} className="px-3 py-1">
-                      <PlayerCell
-                        name={slot.player.web_name}
-                        proj={proj}
-                        isCaptain={slot.pick.is_captain}
-                        isVice={slot.pick.is_vice_captain}
-                        benched={slot.pick.multiplier === 0}
-                        team={slot.team.short_name}
-                      />
-                    </td>
-                  );
-                })}
-              </tr>
-            ));
-          })}
-          <tr className="bg-muted/40 font-semibold">
-            <td className="px-4 py-3 text-xs uppercase text-muted-foreground">Projected XI</td>
-            {cols.map((_, i) => (
-              <td key={i} className="px-3 py-3 text-sm">
-                {(i === 0 ? userProjection : rivalProjections[i - 1]).startingXIPoints.toFixed(1)} pts
-              </td>
-            ))}
-          </tr>
-        </tbody>
-      </table>
+                <div className="divide-y">
+                  {rows.map((row, i) => (
+                    <PlayerSide
+                      key={i}
+                      slot={row.rival}
+                      proj={row.rival && rivalMap.get(row.rival.player.id)}
+                      eo={row.rival && eo ? eo[row.rival.player.id] : undefined}
+                      highlight={row.shared ? "shared" : row.rival ? "threat" : "none"}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

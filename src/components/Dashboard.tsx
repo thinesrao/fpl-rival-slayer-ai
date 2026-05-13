@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, RefreshCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,9 +14,15 @@ import { DifferentialsCard } from "@/components/DifferentialsCard";
 import { ProjectionsChart } from "@/components/ProjectionsChart";
 import { OvertakeMeter } from "@/components/OvertakeMeter";
 import { RecommendationsPanel } from "@/components/RecommendationsPanel";
+import { IntelPanel } from "@/components/IntelPanel";
+import { RetrospectivePanel } from "@/components/RetrospectivePanel";
+import { LivePanel } from "@/components/LivePanel";
+import { NotificationToggle } from "@/components/NotificationToggle";
 import type { OvertakeOdds, RivalContext, SquadProjection } from "@/lib/types";
 import type { AiResult } from "@/lib/ai/gemini";
 import type { TransferSuggestion } from "@/lib/optimizer/transfers";
+import type { PlayerEo } from "@/lib/intel/effective-ownership";
+import type { PriceMoveReport } from "@/lib/intel/price-changes";
 import { toast } from "sonner";
 
 interface AnalysisResponse {
@@ -29,13 +35,21 @@ interface AnalysisResponse {
     rivalOnly: Array<{ name: string; rival: string; xPts: number }>;
   };
   shortlist: TransferSuggestion[];
+  freeTransfers: number;
+  bank: number;
   ai: AiResult;
+  cachedAt?: string;
+  cacheStatus?: "hit" | "miss" | "refreshed";
+  eo?: Record<number, PlayerEo>;
+  priceMoves?: PriceMoveReport;
 }
 
 interface ProjectionsResponse {
   context: RivalContext;
   targetGw: number;
   projections: { gw: number; user: SquadProjection; rivals: SquadProjection[]; overtake: OvertakeOdds[] };
+  eo?: Record<number, PlayerEo>;
+  priceMoves?: PriceMoveReport;
 }
 
 interface DifferentialsExt {
@@ -80,13 +94,27 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
     queryFn: () => fetchJson<ProjectionsResponse>(`/api/projections?teamId=${teamId}&leagueId=${leagueId}`),
   });
 
+  const forceRefreshRef = useRef(false);
+  const [refreshing, setRefreshing] = useState(false);
   const analysisQuery = useQuery({
     queryKey: ["analysis", teamId, leagueId],
-    queryFn: () => fetchJson<AnalysisResponse>(`/api/analysis?teamId=${teamId}&leagueId=${leagueId}`),
+    queryFn: () => {
+      const refresh = forceRefreshRef.current ? "&refresh=1" : "";
+      return fetchJson<AnalysisResponse>(`/api/analysis?teamId=${teamId}&leagueId=${leagueId}${refresh}`);
+    },
     enabled: aiEnabled && !!projectionsQuery.data,
     retry: 0,
     staleTime: 5 * 60 * 1000,
   });
+
+  const refetchAnalysis = (force: boolean) => {
+    forceRefreshRef.current = force;
+    setRefreshing(force);
+    analysisQuery.refetch().finally(() => {
+      forceRefreshRef.current = false;
+      setRefreshing(false);
+    });
+  };
 
   useEffect(() => {
     if (analysisQuery.error) toast.error((analysisQuery.error as Error).message);
@@ -120,6 +148,8 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
   const diff: DifferentialsExt =
     analysisQuery.data?.differentials ??
     ({ userOnly: [], rivalOnly: [] } as DifferentialsExt);
+  const eo = analysisQuery.data?.eo ?? data.eo;
+  const priceMoves = analysisQuery.data?.priceMoves ?? data.priceMoves;
 
   const closestRival = projections.overtake[0];
 
@@ -137,22 +167,25 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
             <span className="font-medium text-foreground">{ctx.user.entry.total}</span> pts
           </p>
         </div>
-        <div className="flex items-center gap-3 rounded-lg border bg-card/70 px-4 py-2 text-sm">
-          <div className="text-right">
-            <div className="text-xs uppercase tracking-wider text-muted-foreground">GW {projections.gw} deadline</div>
-            <div className="font-mono text-base">{countdown ?? "—"}</div>
+        <div className="flex flex-wrap items-center gap-3">
+          <NotificationToggle teamId={teamId} />
+          <div className="flex items-center gap-3 rounded-lg border bg-card/70 px-4 py-2 text-sm">
+            <div className="text-right">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground">GW {projections.gw} deadline</div>
+              <div className="font-mono text-base">{countdown ?? "—"}</div>
+            </div>
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="Refresh"
+              onClick={() => {
+                projectionsQuery.refetch();
+                refetchAnalysis(false);
+              }}
+            >
+              <RefreshCcw className="h-4 w-4" />
+            </Button>
           </div>
-          <Button
-            variant="outline"
-            size="icon"
-            aria-label="Refresh"
-            onClick={() => {
-              projectionsQuery.refetch();
-              analysisQuery.refetch();
-            }}
-          >
-            <RefreshCcw className="h-4 w-4" />
-          </Button>
         </div>
       </div>
 
@@ -178,6 +211,8 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
           <TabsTrigger value="differentials">Differentials</TabsTrigger>
           <TabsTrigger value="projections">Projections</TabsTrigger>
           <TabsTrigger value="ai">AI Coach</TabsTrigger>
+          <TabsTrigger value="live">Live</TabsTrigger>
+          <TabsTrigger value="retrospective">Retrospective</TabsTrigger>
         </TabsList>
 
         <TabsContent value="squads" className="mt-4">
@@ -186,15 +221,17 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
             userProjection={projections.user}
             rivals={ctx.rivals}
             rivalProjections={projections.rivals}
+            eo={eo}
           />
         </TabsContent>
 
-        <TabsContent value="differentials" className="mt-4">
+        <TabsContent value="differentials" className="mt-4 space-y-4">
           {analysisQuery.isLoading && aiEnabled ? (
             <Skeleton className="h-40 w-full" />
           ) : (
             <DifferentialsCard userOnly={diff.userOnly} rivalOnly={diff.rivalOnly} />
           )}
+          {eo && priceMoves && <IntelPanel eo={eo} priceMoves={priceMoves} />}
         </TabsContent>
 
         <TabsContent value="projections" className="mt-4 grid gap-4 lg:grid-cols-2">
@@ -205,6 +242,14 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
             rivalProjections={projections.rivals}
           />
           <OvertakeMeter odds={projections.overtake} />
+        </TabsContent>
+
+        <TabsContent value="live" className="mt-4">
+          <LivePanel teamId={teamId} leagueId={leagueId} />
+        </TabsContent>
+
+        <TabsContent value="retrospective" className="mt-4">
+          <RetrospectivePanel teamId={teamId} leagueId={leagueId} />
         </TabsContent>
 
         <TabsContent value="ai" className="mt-4">
@@ -224,7 +269,15 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
               <AlertDescription>{(analysisQuery.error as Error).message}</AlertDescription>
             </Alert>
           ) : ai ? (
-            <RecommendationsPanel ai={ai} />
+            <RecommendationsPanel
+              ai={ai}
+              freeTransfers={analysisQuery.data?.freeTransfers}
+              bank={analysisQuery.data?.bank}
+              cachedAt={analysisQuery.data?.cachedAt}
+              cacheStatus={analysisQuery.data?.cacheStatus}
+              refreshing={refreshing}
+              onRefresh={() => refetchAnalysis(true)}
+            />
           ) : (
             <Card>
               <CardHeader>
@@ -232,7 +285,7 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
                 <CardDescription>Click refresh to query Gemini with the latest news.</CardDescription>
               </CardHeader>
               <CardContent>
-                <Button onClick={() => analysisQuery.refetch()}>Run analysis</Button>
+                <Button onClick={() => refetchAnalysis(false)}>Run analysis</Button>
               </CardContent>
             </Card>
           )}

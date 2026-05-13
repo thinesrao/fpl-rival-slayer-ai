@@ -7,6 +7,8 @@ import { GoogleGenAI, type GroundingMetadata } from "@google/genai";
 import { aiEnabled, env } from "@/lib/env";
 import { SYSTEM_INSTRUCTION, buildUserPrompt } from "./prompts";
 import type {
+  FplBootstrap,
+  FplFixture,
   ManagerSquad,
   OvertakeOdds,
   RivalContext,
@@ -30,6 +32,13 @@ export interface AiRecommendation {
     reasoning: string;
   };
   differentials_to_exploit: string[];
+  multi_gw_plan: Array<{
+    gw: number;
+    intent: string;
+    transfers: Array<{ out: string; in: string; reason: string; hit_cost?: number }>;
+    captain: string;
+    notes: string;
+  }>;
   news_citations: Array<{ player: string; summary: string; source_url?: string }>;
   confidence: "low" | "medium" | "high";
 }
@@ -50,27 +59,84 @@ function client(): GoogleGenAI {
   return cachedClient;
 }
 
+function findBalancedObjects(text: string): string[] {
+  // Walk the string string-aware, returning every top-level `{...}` slice.
+  const results: string[] = [];
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escape = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (inString) {
+      if (ch === "\\") escape = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === "{") {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (ch === "}") {
+      if (depth > 0) depth--;
+      if (depth === 0 && start !== -1) {
+        results.push(text.slice(start, i + 1));
+        start = -1;
+      }
+    }
+  }
+  return results;
+}
+
+function tryParse(candidate: string): unknown | null {
+  try {
+    return JSON.parse(candidate);
+  } catch {
+    // Try simple repairs: smart quotes, trailing commas.
+    const repaired = candidate
+      .replace(/,(\s*[}\]])/g, "$1")
+      .replace(/[“”]/g, '"')
+      .replace(/[‘’]/g, "'");
+    try {
+      return JSON.parse(repaired);
+    } catch {
+      return null;
+    }
+  }
+}
+
 function extractJsonBlock(text: string): unknown {
-  // Prefer fenced ```json block.
-  const fence = text.match(/```json\s*([\s\S]*?)```/i) ?? text.match(/```\s*([\s\S]*?)```/i);
-  if (fence) {
-    try {
-      return JSON.parse(fence[1]);
-    } catch {
-      // fall through
-    }
+  const trimmed = text.trim();
+  // 1) Direct parse (model returned strict JSON).
+  const direct = tryParse(trimmed);
+  if (direct !== null) return direct;
+
+  // 2) Every fenced block, in order — try each body.
+  const fenceRe = /```(?:json|JSON)?\s*([\s\S]*?)```/g;
+  const fenceMatches = [...text.matchAll(fenceRe)];
+  for (const m of fenceMatches) {
+    const parsed = tryParse(m[1].trim());
+    if (parsed !== null) return parsed;
   }
-  // Fall back to the largest balanced { ... } block.
-  const first = text.indexOf("{");
-  const last = text.lastIndexOf("}");
-  if (first !== -1 && last !== -1 && last > first) {
-    try {
-      return JSON.parse(text.slice(first, last + 1));
-    } catch {
-      // fall through
-    }
+
+  // 3) Balanced { ... } objects, largest first (the schema object is usually the biggest).
+  const candidates = findBalancedObjects(text).sort((a, b) => b.length - a.length);
+  for (const c of candidates) {
+    const parsed = tryParse(c);
+    if (parsed !== null) return parsed;
   }
-  throw new Error("Gemini response did not contain a parseable JSON object");
+
+  const sample = trimmed.length > 400 ? `${trimmed.slice(0, 400)}…[+${trimmed.length - 400}b]` : trimmed;
+  const err = new Error(`Gemini response did not contain a parseable JSON object. Sample: ${sample}`);
+  (err as Error & { rawText?: string }).rawText = text;
+  throw err;
 }
 
 function coerceRecommendation(parsed: unknown): AiRecommendation {
@@ -87,6 +153,9 @@ function coerceRecommendation(parsed: unknown): AiRecommendation {
     chip: (p.chip as AiRecommendation["chip"]) ?? { use: "none", reasoning: "" },
     differentials_to_exploit: Array.isArray(p.differentials_to_exploit)
       ? (p.differentials_to_exploit as string[])
+      : [],
+    multi_gw_plan: Array.isArray(p.multi_gw_plan)
+      ? (p.multi_gw_plan as AiRecommendation["multi_gw_plan"])
       : [],
     news_citations: Array.isArray(p.news_citations)
       ? (p.news_citations as AiRecommendation["news_citations"])
@@ -118,6 +187,11 @@ export interface AskStrategistArgs {
     userOnly: Array<{ name: string; xPts: number }>;
     rivalOnly: Array<{ name: string; rival: string; xPts: number }>;
   };
+  fixtures: FplFixture[];
+  horizonFixtures: Array<{ gw: number; fixtures: FplFixture[] }>;
+  bs: FplBootstrap;
+  eo: import("@/lib/intel/effective-ownership").EoMap;
+  priceMoves: import("@/lib/intel/price-changes").PriceMoveReport;
 }
 
 export async function askStrategist(args: AskStrategistArgs): Promise<AiResult> {
@@ -135,6 +209,11 @@ export async function askStrategist(args: AskStrategistArgs): Promise<AiResult> 
     freeTransfers: args.freeTransfers,
     shortlist: args.shortlist,
     differentials: args.differentials,
+    fixtures: args.fixtures,
+    horizonFixtures: args.horizonFixtures,
+    bs: args.bs,
+    eo: args.eo,
+    priceMoves: args.priceMoves,
   });
 
   const model = env.GEMINI_MODEL;
@@ -143,13 +222,60 @@ export async function askStrategist(args: AskStrategistArgs): Promise<AiResult> 
     contents: userPrompt,
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
-      temperature: 0.4,
+      temperature: 0.3,
       tools: [{ googleSearch: {} }],
+      // Cap thinking so flash actually returns a final answer — with full
+      // automatic thinking + googleSearch we occasionally got finishReason=STOP
+      // with thoughts only and no usable text part.
+      thinkingConfig: { thinkingBudget: 2048 },
+      maxOutputTokens: 8192,
     },
   });
 
-  const text = response.text ?? "";
-  const parsed = extractJsonBlock(text);
+  // Robustly extract text from .text getter and, failing that, from candidate parts.
+  // `response.text` sometimes returns "" when the model produced only function/tool
+  // outputs or when a single part is missing the `text` field even though others have it.
+  const candidate = response.candidates?.[0];
+  const partsText = (candidate?.content?.parts ?? [])
+    .map((p) => ("text" in p && typeof p.text === "string" ? p.text : ""))
+    .join("");
+  const text = response.text || partsText || "";
+  const finishReason = candidate?.finishReason ?? "UNKNOWN";
+
+  if (!text) {
+    // Model returned nothing usable — surface the actual cause.
+    const err = new Error(
+      `Gemini returned no text content (finishReason=${finishReason}). ` +
+        `This usually means a safety/recitation block or a quota issue. ` +
+        `Try lowering the rival count or switching GEMINI_MODEL to gemini-2.5-pro.`,
+    );
+    (err as Error & { rawText?: string }).rawText = JSON.stringify(
+      { finishReason, safetyRatings: candidate?.safetyRatings, promptFeedback: response.promptFeedback },
+      null,
+      2,
+    );
+    throw err;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = extractJsonBlock(text);
+  } catch (firstErr) {
+    // Reformat-only retry: no tools, low temperature, strict JSON prompt.
+    // We still keep the original grounding metadata (the search was already done).
+    const reformat = await ai.models.generateContent({
+      model,
+      contents: `The following text was meant to be a JSON object matching a schema, but failed to parse. Re-emit it as a single valid JSON object. Output NOTHING except the JSON — no prose, no markdown fences, no comments. If a field is missing, fill with a sensible default ("", [], "medium", "none"). Preserve every concrete recommendation (transfers, captain, citations) from the source text.\n\nSOURCE:\n${text.slice(0, 12000)}`,
+      config: { temperature: 0.0, responseMimeType: "application/json" },
+    });
+    try {
+      parsed = extractJsonBlock(reformat.text ?? "");
+    } catch {
+      // Surface the original error (with raw sample) so the route can return it.
+      throw firstErr;
+    }
+  }
+
   const recommendation = coerceRecommendation(parsed);
   const grounding = extractGrounding(response.candidates?.[0]?.groundingMetadata);
 

@@ -1,7 +1,14 @@
+import { redirect } from "next/navigation";
 import { RivalForm } from "@/components/RivalForm";
+import { defaults } from "@/lib/env";
 import { Target, Newspaper, Brain } from "lucide-react";
 
 export default function Home() {
+  // Personal-use shortcut: if both defaults are configured, jump straight to the dashboard.
+  if (defaults.teamId && defaults.leagueId) {
+    redirect(`/dashboard/${defaults.teamId}/${defaults.leagueId}`);
+  }
+
   return (
     <main className="relative min-h-screen overflow-hidden">
       <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(60%_60%_at_50%_0%,hsl(var(--primary)/0.25),transparent_70%)]" />

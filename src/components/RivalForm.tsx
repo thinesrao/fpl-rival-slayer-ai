@@ -6,13 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { defaults } from "@/lib/env";
 import { Info, Swords } from "lucide-react";
 import { toast } from "sonner";
 
 export function RivalForm() {
   const router = useRouter();
-  const [teamId, setTeamId] = useState("");
-  const [leagueId, setLeagueId] = useState("");
+  const [teamId, setTeamId] = useState(defaults.teamId ? String(defaults.teamId) : "");
+  const [leagueId, setLeagueId] = useState(defaults.leagueId ? String(defaults.leagueId) : "");
   const [loading, setLoading] = useState(false);
 
   function onSubmit(e: React.FormEvent) {
