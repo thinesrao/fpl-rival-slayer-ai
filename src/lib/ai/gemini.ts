@@ -217,6 +217,19 @@ export async function askStrategist(args: AskStrategistArgs): Promise<AiResult> 
   });
 
   const model = env.GEMINI_MODEL;
+
+  function extractText(resp: Awaited<ReturnType<typeof ai.models.generateContent>>) {
+    const candidate = resp.candidates?.[0];
+    const partsText = (candidate?.content?.parts ?? [])
+      .map((p) => ("text" in p && typeof p.text === "string" ? p.text : ""))
+      .join("");
+    return {
+      text: resp.text || partsText || "",
+      finishReason: candidate?.finishReason ?? "UNKNOWN",
+      candidate,
+    };
+  }
+
   const response = await ai.models.generateContent({
     model,
     contents: userPrompt,
@@ -228,29 +241,41 @@ export async function askStrategist(args: AskStrategistArgs): Promise<AiResult> 
       // automatic thinking + googleSearch we occasionally got finishReason=STOP
       // with thoughts only and no usable text part.
       thinkingConfig: { thinkingBudget: 2048 },
-      maxOutputTokens: 8192,
+      maxOutputTokens: 16384,
     },
   });
 
-  // Robustly extract text from .text getter and, failing that, from candidate parts.
-  // `response.text` sometimes returns "" when the model produced only function/tool
-  // outputs or when a single part is missing the `text` field even though others have it.
-  const candidate = response.candidates?.[0];
-  const partsText = (candidate?.content?.parts ?? [])
-    .map((p) => ("text" in p && typeof p.text === "string" ? p.text : ""))
-    .join("");
-  const text = response.text || partsText || "";
-  const finishReason = candidate?.finishReason ?? "UNKNOWN";
+  let { text, finishReason, candidate } = extractText(response);
+  let usedResponse = response;
 
   if (!text) {
-    // Model returned nothing usable — surface the actual cause.
+    // Grounded call produced no usable text (model spent its budget thinking, or
+    // safety/recitation blocked the only response part). Retry once WITHOUT
+    // googleSearch — we sacrifice live news for reliability so the user always
+    // gets a recommendation. The downstream JSON-extract path is identical.
+    const fallback = await ai.models.generateContent({
+      model,
+      contents: userPrompt,
+      config: {
+        systemInstruction: SYSTEM_INSTRUCTION,
+        temperature: 0.3,
+        thinkingConfig: { thinkingBudget: 1024 },
+        maxOutputTokens: 16384,
+        responseMimeType: "application/json",
+      },
+    });
+    ({ text, finishReason, candidate } = extractText(fallback));
+    usedResponse = fallback;
+  }
+
+  if (!text) {
     const err = new Error(
       `Gemini returned no text content (finishReason=${finishReason}). ` +
         `This usually means a safety/recitation block or a quota issue. ` +
         `Try lowering the rival count or switching GEMINI_MODEL to gemini-2.5-pro.`,
     );
     (err as Error & { rawText?: string }).rawText = JSON.stringify(
-      { finishReason, safetyRatings: candidate?.safetyRatings, promptFeedback: response.promptFeedback },
+      { finishReason, safetyRatings: candidate?.safetyRatings, promptFeedback: usedResponse.promptFeedback },
       null,
       2,
     );
@@ -277,7 +302,7 @@ export async function askStrategist(args: AskStrategistArgs): Promise<AiResult> 
   }
 
   const recommendation = coerceRecommendation(parsed);
-  const grounding = extractGrounding(response.candidates?.[0]?.groundingMetadata);
+  const grounding = extractGrounding(usedResponse.candidates?.[0]?.groundingMetadata);
 
   // Backfill source_url on citations from grounding chunks where the AI omitted them.
   if (recommendation.news_citations.length && grounding.chunks.length) {

@@ -21,23 +21,55 @@ type Status = "loading" | "unsupported" | "off" | "on" | "blocked";
 export function NotificationToggle({ teamId }: { teamId: number }) {
   const [status, setStatus] = useState<Status>("loading");
   const [busy, setBusy] = useState(false);
+  const [unsupportedReason, setUnsupportedReason] = useState<string>("");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (!("serviceWorker" in navigator) || !("PushManager" in window) || !VAPID_PUBLIC) {
+    if (!VAPID_PUBLIC) {
+      setUnsupportedReason("VAPID key missing on server build");
+      setStatus("unsupported");
+      return;
+    }
+    if (!("serviceWorker" in navigator)) {
+      setUnsupportedReason("Service workers not available");
+      setStatus("unsupported");
+      return;
+    }
+    if (!("PushManager" in window)) {
+      // Most common: iOS Safari (web push only works once installed as PWA on iOS 16.4+).
+      const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+      setUnsupportedReason(
+        isIos
+          ? "Install this app to your Home Screen first (iOS only enables push for installed PWAs)"
+          : "This browser doesn't support web push",
+      );
       setStatus("unsupported");
       return;
     }
     (async () => {
-      const reg = await navigator.serviceWorker.getRegistration();
-      if (!reg) return setStatus("off");
+      // Wait for SW to actually register (PwaShell triggers it in parallel; race-safe).
+      const reg = (await navigator.serviceWorker.getRegistration()) ?? (await navigator.serviceWorker.ready);
       const sub = await reg.pushManager.getSubscription();
       if (sub) return setStatus("on");
       setStatus(Notification.permission === "denied" ? "blocked" : "off");
     })();
   }, []);
 
-  if (status === "loading" || status === "unsupported") return null;
+  if (status === "loading") return null;
+  if (status === "unsupported") {
+    return (
+      <Button
+        variant="outline"
+        size="sm"
+        disabled
+        className="gap-1.5 text-xs"
+        title={unsupportedReason}
+      >
+        <BellOff className="h-3.5 w-3.5" />
+        Alerts unavailable
+      </Button>
+    );
+  }
 
   const enable = async () => {
     if (!VAPID_PUBLIC) {
