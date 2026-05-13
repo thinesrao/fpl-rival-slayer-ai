@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "crons": [
-    { "path": "/api/cron/news-watch", "schedule": "*/30 * * * *" },
-    { "path": "/api/cron/deadline-watch", "schedule": "0 * * * *" }
+    { "path": "/api/cron/news-watch", "schedule": "30 12 * * *" },
+    { "path": "/api/cron/deadline-watch", "schedule": "0 12 * * *" }
   ]
 }
