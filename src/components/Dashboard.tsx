@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, RefreshCcw } from "lucide-react";
@@ -24,6 +24,7 @@ import type { TransferSuggestion } from "@/lib/optimizer/transfers";
 import type { PlayerEo } from "@/lib/intel/effective-ownership";
 import type { PriceMoveReport } from "@/lib/intel/price-changes";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 interface AnalysisResponse {
   context: RivalContext;
@@ -89,13 +90,21 @@ async function fetchJson<T>(url: string): Promise<T> {
 }
 
 export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
+  const queryClient = useQueryClient();
+  const projectionsForceRef = useRef(false);
   const projectionsQuery = useQuery({
     queryKey: ["projections", teamId, leagueId],
-    queryFn: () => fetchJson<ProjectionsResponse>(`/api/projections?teamId=${teamId}&leagueId=${leagueId}`),
+    queryFn: () => {
+      const refresh = projectionsForceRef.current ? "&refresh=1" : "";
+      return fetchJson<ProjectionsResponse>(
+        `/api/projections?teamId=${teamId}&leagueId=${leagueId}${refresh}`,
+      );
+    },
   });
 
   const forceRefreshRef = useRef(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshingAll, setRefreshingAll] = useState(false);
   const analysisQuery = useQuery({
     queryKey: ["analysis", teamId, leagueId],
     queryFn: () => {
@@ -114,6 +123,24 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
       forceRefreshRef.current = false;
       setRefreshing(false);
     });
+  };
+
+  const [refreshSignal, setRefreshSignal] = useState(0);
+
+  const refreshAll = async () => {
+    setRefreshingAll(true);
+    projectionsForceRef.current = true;
+    setRefreshSignal((n) => n + 1);
+    try {
+      await Promise.all([
+        projectionsQuery.refetch(),
+        queryClient.invalidateQueries({ queryKey: ["retrospective", teamId, leagueId] }),
+      ]);
+      refetchAnalysis(false);
+    } finally {
+      projectionsForceRef.current = false;
+      setRefreshingAll(false);
+    }
   };
 
   useEffect(() => {
@@ -176,14 +203,13 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
             </div>
             <Button
               variant="outline"
-              size="icon"
-              aria-label="Refresh"
-              onClick={() => {
-                projectionsQuery.refetch();
-                refetchAnalysis(false);
-              }}
+              size="sm"
+              aria-label="Refresh all data"
+              onClick={refreshAll}
+              disabled={refreshingAll}
             >
-              <RefreshCcw className="h-4 w-4" />
+              <RefreshCcw className={cn("h-4 w-4", refreshingAll && "animate-spin")} />
+              <span className="ml-1.5 hidden sm:inline">{refreshingAll ? "Refreshing…" : "Refresh"}</span>
             </Button>
           </div>
         </div>
@@ -245,7 +271,7 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
         </TabsContent>
 
         <TabsContent value="live" className="mt-4">
-          <LivePanel teamId={teamId} leagueId={leagueId} />
+          <LivePanel teamId={teamId} leagueId={leagueId} refreshSignal={refreshSignal} />
         </TabsContent>
 
         <TabsContent value="retrospective" className="mt-4">

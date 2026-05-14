@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -21,10 +22,14 @@ interface ManagerLive {
   benchPoints: number;
 }
 
+type LiveStatus = "pre" | "live" | "finished";
+
 interface LiveResponse {
   gw: number;
+  status: LiveStatus;
   inProgress: boolean;
   finished: boolean;
+  bonusConfirmed?: boolean;
   deadlineIso: string;
   leagueName: string;
   user: ManagerLive | null;
@@ -43,15 +48,30 @@ async function fetchJson<T>(url: string): Promise<T> {
 interface Props {
   teamId: number;
   leagueId: number;
+  refreshSignal?: number;
 }
 
-export function LivePanel({ teamId, leagueId }: Props) {
+export function LivePanel({ teamId, leagueId, refreshSignal = 0 }: Props) {
+  const bustNextRef = useRef(false);
   const q = useQuery({
     queryKey: ["live", teamId, leagueId],
-    queryFn: () => fetchJson<LiveResponse>(`/api/live?teamId=${teamId}&leagueId=${leagueId}`),
+    queryFn: () => {
+      const refresh = bustNextRef.current ? "&refresh=1" : "";
+      bustNextRef.current = false;
+      return fetchJson<LiveResponse>(`/api/live?teamId=${teamId}&leagueId=${leagueId}${refresh}`);
+    },
     refetchInterval: 60_000,
     retry: 0,
   });
+
+  // External "Refresh" click bumps refreshSignal — refetch with cache-bust.
+  useEffect(() => {
+    if (refreshSignal > 0) {
+      bustNextRef.current = true;
+      q.refetch();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshSignal]);
 
   if (q.isLoading) return <Skeleton className="h-64 w-full" />;
   if (q.error) {
@@ -64,14 +84,13 @@ export function LivePanel({ teamId, leagueId }: Props) {
   }
   const data = q.data!;
 
-  if (!data.inProgress || !data.user) {
+  if (data.status === "pre" || !data.user) {
     return (
       <Alert>
         <Radio className="h-4 w-4" />
         <AlertTitle>No live gameweek</AlertTitle>
         <AlertDescription>
-          GW {data.gw} {data.finished ? "is finished" : "hasn’t started yet"}. The live tracker shows scores
-          while matches are in progress.
+          GW {data.gw} hasn’t kicked off yet. The live tracker shows scores once the deadline passes.
         </AlertDescription>
       </Alert>
     );
@@ -79,21 +98,41 @@ export function LivePanel({ teamId, leagueId }: Props) {
 
   const user = data.user;
   const rows = [user, ...data.rivals].sort((a, b) => b.liveScore - a.liveScore);
+  const isFinished = data.status === "finished";
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2 rounded-md border bg-success/10 px-3 py-2 text-xs">
-        <Activity className="h-3.5 w-3.5 text-success animate-pulse" />
-        <span className="font-medium">LIVE</span>
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 text-xs",
+          isFinished ? "bg-muted/40" : "bg-success/10",
+        )}
+      >
+        <Activity
+          className={cn(
+            "h-3.5 w-3.5",
+            isFinished ? "text-muted-foreground" : "text-success animate-pulse",
+          )}
+        />
+        <span className="font-medium">{isFinished ? "FINAL" : "LIVE"}</span>
         <span className="text-muted-foreground">
-          GW {data.gw} · auto-refreshes every 60s
+          GW {data.gw} ·{" "}
+          {isFinished
+            ? data.bonusConfirmed
+              ? "all matches done, bonus confirmed"
+              : "all matches done, bonus pending"
+            : "auto-refreshes every 60s"}
         </span>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Live scoreboard</CardTitle>
-          <CardDescription>Your position right now vs the rivals immediately above.</CardDescription>
+          <CardTitle className="text-base">{isFinished ? "Final scoreboard" : "Live scoreboard"}</CardTitle>
+          <CardDescription>
+            {isFinished
+              ? "Final GW points for you and the rivals immediately above."
+              : "Your position right now vs the rivals immediately above."}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <ul className="divide-y rounded-md border">

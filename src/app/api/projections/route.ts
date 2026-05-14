@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { z } from "zod";
-import { FplError } from "@/lib/fpl/client";
+import { FplError, bustBootstrap } from "@/lib/fpl/client";
 import { buildRivalContext } from "@/lib/fpl/rivals";
 import { buildProjections } from "@/lib/projections";
 import { computeEffectiveOwnership } from "@/lib/intel/effective-ownership";
@@ -13,6 +14,7 @@ const Query = z.object({
   teamId: z.coerce.number().int().positive(),
   leagueId: z.coerce.number().int().positive(),
   n: z.coerce.number().int().min(1).max(5).default(3),
+  refresh: z.coerce.number().int().min(0).max(1).default(0),
 });
 
 export async function GET(req: NextRequest) {
@@ -20,6 +22,13 @@ export async function GET(req: NextRequest) {
   const parsed = Query.safeParse(params);
   if (!parsed.success) {
     return NextResponse.json({ error: "invalid_query", detail: parsed.error.flatten() }, { status: 400 });
+  }
+
+  if (parsed.data.refresh) {
+    bustBootstrap();
+    revalidateTag("fpl-live");
+    revalidateTag("fpl-fixtures");
+    revalidateTag("fpl-element-summary");
   }
 
   try {

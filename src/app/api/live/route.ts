@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { z } from "zod";
 import {
   FplError,
+  bustBootstrap,
   currentEvent,
   getBootstrap,
   getFixtures,
@@ -17,6 +19,7 @@ const Query = z.object({
   teamId: z.coerce.number().int().positive(),
   leagueId: z.coerce.number().int().positive(),
   n: z.coerce.number().int().min(1).max(5).default(3),
+  refresh: z.coerce.number().int().min(0).max(1).default(0),
 });
 
 interface ManagerLive {
@@ -32,23 +35,33 @@ interface ManagerLive {
   benchPoints: number;
 }
 
+type LiveStatus = "pre" | "live" | "finished";
+
 export async function GET(req: NextRequest) {
   const parsed = Query.safeParse(Object.fromEntries(req.nextUrl.searchParams));
   if (!parsed.success) {
     return NextResponse.json({ error: "invalid_query", detail: parsed.error.flatten() }, { status: 400 });
   }
 
+  if (parsed.data.refresh) {
+    bustBootstrap();
+    revalidateTag("fpl-live-gw");
+    revalidateTag("fpl-live");
+    revalidateTag("fpl-fixtures");
+  }
+
   try {
     const bs = await getBootstrap();
     const cur = currentEvent(bs);
-    const inProgress = cur.is_current && !cur.finished;
+    const deadlinePassed = Date.now() >= new Date(cur.deadline_time).getTime();
 
-    // Cheap path when nothing is live — skip the multi-page standings walk.
-    if (!inProgress) {
+    // Pre-deadline: nothing to score yet.
+    if (!deadlinePassed) {
       return NextResponse.json({
         gw: cur.id,
+        status: "pre" as LiveStatus,
         inProgress: false,
-        finished: cur.finished,
+        finished: false,
         deadlineIso: cur.deadline_time,
         leagueName: "",
         user: null,
@@ -136,10 +149,15 @@ export async function GET(req: NextRequest) {
       ...context.rivals.map((r) => buildManagerLive(r, "rival")),
     ]);
 
+    const allFixturesDone = fixtures.length > 0 && fixtures.every((fx) => fx.finished);
+    const status: LiveStatus = allFixturesDone || cur.finished ? "finished" : "live";
+
     return NextResponse.json({
       gw: cur.id,
-      inProgress,
-      finished: cur.finished,
+      status,
+      inProgress: status === "live",
+      finished: status === "finished",
+      bonusConfirmed: cur.finished,
       deadlineIso: cur.deadline_time,
       leagueName: context.leagueName,
       user: userLive,
