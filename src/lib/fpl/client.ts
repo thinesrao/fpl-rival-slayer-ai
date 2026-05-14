@@ -45,6 +45,10 @@ export class FplError extends Error {
   }
 }
 
+export function bustBootstrap(): void {
+  bootstrapCache = null;
+}
+
 export async function getBootstrap(): Promise<FplBootstrap> {
   const now = Date.now();
   if (bootstrapCache && now - bootstrapCache.at < BOOTSTRAP_TTL_MS) return bootstrapCache.data;

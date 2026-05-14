@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, RefreshCcw } from "lucide-react";
@@ -14,16 +14,22 @@ import { DifferentialsCard } from "@/components/DifferentialsCard";
 import { ProjectionsChart } from "@/components/ProjectionsChart";
 import { OvertakeMeter } from "@/components/OvertakeMeter";
 import { RecommendationsPanel } from "@/components/RecommendationsPanel";
+import { ChatPanel } from "@/components/ChatPanel";
+import { PlanPanel } from "@/components/PlanPanel";
+import { WhatIfModal } from "@/components/WhatIfModal";
+import { RivalChipsPanel } from "@/components/RivalChipsPanel";
+import { LeagueHeatmap } from "@/components/LeagueHeatmap";
 import { IntelPanel } from "@/components/IntelPanel";
 import { RetrospectivePanel } from "@/components/RetrospectivePanel";
 import { LivePanel } from "@/components/LivePanel";
 import { NotificationToggle } from "@/components/NotificationToggle";
-import type { OvertakeOdds, RivalContext, SquadProjection } from "@/lib/types";
+import type { FplBootstrap, FplFixture, OvertakeOdds, RivalContext, SquadProjection } from "@/lib/types";
 import type { AiResult } from "@/lib/ai/gemini";
 import type { TransferSuggestion } from "@/lib/optimizer/transfers";
 import type { PlayerEo } from "@/lib/intel/effective-ownership";
 import type { PriceMoveReport } from "@/lib/intel/price-changes";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 interface AnalysisResponse {
   context: RivalContext;
@@ -44,10 +50,30 @@ interface AnalysisResponse {
   priceMoves?: PriceMoveReport;
 }
 
+interface HorizonGwResponse {
+  gw: number;
+  fixtures: FplFixture[];
+  user: SquadProjection;
+  rivals: SquadProjection[];
+  overtake: OvertakeOdds[];
+}
+
+interface CumulativeOvertakeResponse {
+  rivalEntryId: number;
+  rivalName: string;
+  pointsBehind: number;
+  userExpectedTotal: number;
+  rivalExpectedTotal: number;
+  expectedDelta: number;
+  overtakeProbability: number;
+}
+
 interface ProjectionsResponse {
   context: RivalContext;
   targetGw: number;
   projections: { gw: number; user: SquadProjection; rivals: SquadProjection[]; overtake: OvertakeOdds[] };
+  horizon?: { horizon: HorizonGwResponse[]; cumulative: CumulativeOvertakeResponse[] };
+  teams?: FplBootstrap["teams"];
   eo?: Record<number, PlayerEo>;
   priceMoves?: PriceMoveReport;
 }
@@ -89,13 +115,21 @@ async function fetchJson<T>(url: string): Promise<T> {
 }
 
 export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
+  const queryClient = useQueryClient();
+  const projectionsForceRef = useRef(false);
   const projectionsQuery = useQuery({
     queryKey: ["projections", teamId, leagueId],
-    queryFn: () => fetchJson<ProjectionsResponse>(`/api/projections?teamId=${teamId}&leagueId=${leagueId}`),
+    queryFn: () => {
+      const refresh = projectionsForceRef.current ? "&refresh=1" : "";
+      return fetchJson<ProjectionsResponse>(
+        `/api/projections?teamId=${teamId}&leagueId=${leagueId}${refresh}`,
+      );
+    },
   });
 
   const forceRefreshRef = useRef(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshingAll, setRefreshingAll] = useState(false);
   const analysisQuery = useQuery({
     queryKey: ["analysis", teamId, leagueId],
     queryFn: () => {
@@ -114,6 +148,25 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
       forceRefreshRef.current = false;
       setRefreshing(false);
     });
+  };
+
+  const [refreshSignal, setRefreshSignal] = useState(0);
+  const [whatIfOutId, setWhatIfOutId] = useState<number | null>(null);
+
+  const refreshAll = async () => {
+    setRefreshingAll(true);
+    projectionsForceRef.current = true;
+    setRefreshSignal((n) => n + 1);
+    try {
+      await Promise.all([
+        projectionsQuery.refetch(),
+        queryClient.invalidateQueries({ queryKey: ["retrospective", teamId, leagueId] }),
+      ]);
+      refetchAnalysis(false);
+    } finally {
+      projectionsForceRef.current = false;
+      setRefreshingAll(false);
+    }
   };
 
   useEffect(() => {
@@ -176,14 +229,13 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
             </div>
             <Button
               variant="outline"
-              size="icon"
-              aria-label="Refresh"
-              onClick={() => {
-                projectionsQuery.refetch();
-                refetchAnalysis(false);
-              }}
+              size="sm"
+              aria-label="Refresh all data"
+              onClick={refreshAll}
+              disabled={refreshingAll}
             >
-              <RefreshCcw className="h-4 w-4" />
+              <RefreshCcw className={cn("h-4 w-4", refreshingAll && "animate-spin")} />
+              <span className="ml-1.5 hidden sm:inline">{refreshingAll ? "Refreshing…" : "Refresh"}</span>
             </Button>
           </div>
         </div>
@@ -210,18 +262,23 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
           <TabsTrigger value="squads">Squads</TabsTrigger>
           <TabsTrigger value="differentials">Differentials</TabsTrigger>
           <TabsTrigger value="projections">Projections</TabsTrigger>
+          <TabsTrigger value="plan">Plan</TabsTrigger>
           <TabsTrigger value="ai">AI Coach</TabsTrigger>
           <TabsTrigger value="live">Live</TabsTrigger>
           <TabsTrigger value="retrospective">Retrospective</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="squads" className="mt-4">
+        <TabsContent value="squads" className="mt-4 space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Tap any of your players to run a what-if swap simulation.
+          </p>
           <SquadCompareTable
             user={ctx.user}
             userProjection={projections.user}
             rivals={ctx.rivals}
             rivalProjections={projections.rivals}
             eo={eo}
+            onUserPlayerClick={(id) => setWhatIfOutId(id)}
           />
         </TabsContent>
 
@@ -231,6 +288,7 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
           ) : (
             <DifferentialsCard userOnly={diff.userOnly} rivalOnly={diff.rivalOnly} />
           )}
+          <LeagueHeatmap leagueId={leagueId} topN={10} />
           {eo && priceMoves && <IntelPanel eo={eo} priceMoves={priceMoves} />}
         </TabsContent>
 
@@ -244,15 +302,34 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
           <OvertakeMeter odds={projections.overtake} />
         </TabsContent>
 
+        <TabsContent value="plan" className="mt-4 space-y-4">
+          {data.horizon && data.teams ? (
+            <PlanPanel
+              horizon={data.horizon.horizon}
+              cumulative={data.horizon.cumulative}
+              context={ctx}
+              teams={data.teams}
+            />
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Plan horizon unavailable</CardTitle>
+                <CardDescription>Refresh to compute the next 3 gameweeks.</CardDescription>
+              </CardHeader>
+            </Card>
+          )}
+          <RivalChipsPanel teamId={teamId} leagueId={leagueId} />
+        </TabsContent>
+
         <TabsContent value="live" className="mt-4">
-          <LivePanel teamId={teamId} leagueId={leagueId} />
+          <LivePanel teamId={teamId} leagueId={leagueId} refreshSignal={refreshSignal} />
         </TabsContent>
 
         <TabsContent value="retrospective" className="mt-4">
           <RetrospectivePanel teamId={teamId} leagueId={leagueId} />
         </TabsContent>
 
-        <TabsContent value="ai" className="mt-4">
+        <TabsContent value="ai" className="mt-4">{/* AI Coach tab content below */}
           {!aiEnabled ? (
             <Alert variant="warning">
               <AlertTitle>AI Coach disabled</AlertTitle>
@@ -269,28 +346,42 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
               <AlertDescription>{(analysisQuery.error as Error).message}</AlertDescription>
             </Alert>
           ) : ai ? (
-            <RecommendationsPanel
-              ai={ai}
-              freeTransfers={analysisQuery.data?.freeTransfers}
-              bank={analysisQuery.data?.bank}
-              cachedAt={analysisQuery.data?.cachedAt}
-              cacheStatus={analysisQuery.data?.cacheStatus}
-              refreshing={refreshing}
-              onRefresh={() => refetchAnalysis(true)}
-            />
+            <div className="space-y-6">
+              <RecommendationsPanel
+                ai={ai}
+                freeTransfers={analysisQuery.data?.freeTransfers}
+                bank={analysisQuery.data?.bank}
+                cachedAt={analysisQuery.data?.cachedAt}
+                cacheStatus={analysisQuery.data?.cacheStatus}
+                refreshing={refreshing}
+                onRefresh={() => refetchAnalysis(true)}
+              />
+              <ChatPanel teamId={teamId} leagueId={leagueId} />
+            </div>
           ) : (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Run AI analysis</CardTitle>
-                <CardDescription>Click refresh to query Gemini with the latest news.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button onClick={() => refetchAnalysis(false)}>Run analysis</Button>
-              </CardContent>
-            </Card>
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Run AI analysis</CardTitle>
+                  <CardDescription>Click refresh to query Gemini with the latest news.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button onClick={() => refetchAnalysis(false)}>Run analysis</Button>
+                </CardContent>
+              </Card>
+              <ChatPanel teamId={teamId} leagueId={leagueId} />
+            </div>
           )}
         </TabsContent>
       </Tabs>
+
+      <WhatIfModal
+        open={whatIfOutId !== null}
+        onClose={() => setWhatIfOutId(null)}
+        teamId={teamId}
+        leagueId={leagueId}
+        outPlayerId={whatIfOutId}
+      />
     </div>
   );
 }

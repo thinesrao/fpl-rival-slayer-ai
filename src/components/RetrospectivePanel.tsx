@@ -6,7 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowUpRight, Crown, History, TrendingDown, TrendingUp } from "lucide-react";
+import { ArrowUpRight, Crown, Dice5, History, Target, TrendingDown, TrendingUp } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface PlayerRetro {
   playerId: number;
@@ -34,12 +35,46 @@ interface RivalRetro extends ManagerRetro {
   predictedGain: number;
 }
 
+interface PlayerLuck {
+  playerId: number;
+  webName: string;
+  position: "GKP" | "DEF" | "MID" | "FWD";
+  minutes: number;
+  goalsActual: number;
+  assistsActual: number;
+  xGExpected: number;
+  xAExpected: number;
+  luckPts: number;
+  luckPtsGoals: number;
+  luckPtsAssists: number;
+  multiplier: number;
+}
+
+interface LuckSummary {
+  luckIndex: number;
+  perPlayer: PlayerLuck[];
+  topLucky: PlayerLuck[];
+  topUnlucky: PlayerLuck[];
+}
+
+interface CaptainRoi {
+  captainName: string;
+  captainPoints: number;
+  captainMultiplier: number;
+  bestName: string;
+  bestPoints: number;
+  pointsCost: number;
+  hindsightVerdict: string;
+}
+
 interface RetrospectiveResponse {
   gw: number;
   leagueName: string;
   user: ManagerRetro;
   rivals: RivalRetro[];
   aiVerdict?: { captainPick: string; captainActual: number; transfersRecommended: number; note: string };
+  luck?: LuckSummary;
+  captainRoi?: CaptainRoi;
   snapshotTakenAt: string;
 }
 
@@ -130,6 +165,9 @@ export function RetrospectivePanel({ teamId, leagueId }: Props) {
           <AlertDescription>{data.aiVerdict.note}</AlertDescription>
         </Alert>
       )}
+
+      {data.captainRoi && <CaptainRoiCard roi={data.captainRoi} />}
+      {data.luck && <LuckCard luck={data.luck} />}
 
       <Card>
         <CardHeader>
@@ -233,5 +271,116 @@ function ChartPredictedVsActual({ perPlayer }: { perPlayer: PlayerRetro[] }) {
         </BarChart>
       </ResponsiveContainer>
     </div>
+  );
+}
+
+function CaptainRoiCard({ roi }: { roi: CaptainRoi }) {
+  const wasOptimal = roi.pointsCost <= 0;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Target className="h-4 w-4 text-primary" /> Captain ROI
+        </CardTitle>
+        <CardDescription>How your captain pick compared to the best in-XI alternative.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <div className="grid grid-cols-2 gap-2 text-sm">
+          <div className="rounded border bg-muted/40 p-3">
+            <div className="text-[10px] uppercase text-muted-foreground">Your captain</div>
+            <div className="text-base font-semibold">{roi.captainName}</div>
+            <div className="font-mono text-muted-foreground">{roi.captainPoints} pts ({roi.captainMultiplier ?? 2}×)</div>
+          </div>
+          <div className={cn("rounded border p-3", wasOptimal ? "bg-emerald-500/10 border-emerald-500/40" : "bg-amber-500/10 border-amber-500/40")}>
+            <div className="text-[10px] uppercase text-muted-foreground">Best alternative (XI only)</div>
+            <div className="text-base font-semibold">{roi.bestName}</div>
+            <div className="font-mono text-muted-foreground">{roi.bestPoints} pts in this slot</div>
+          </div>
+        </div>
+        <div className="flex items-center justify-between rounded border bg-muted/40 px-3 py-2 text-sm">
+          <span>{roi.hindsightVerdict}</span>
+          <Badge variant={roi.pointsCost > 4 ? "destructive" : roi.pointsCost > 0 ? "warning" : "success"}>
+            {roi.pointsCost > 0 ? `-${roi.pointsCost}` : "optimal"}
+          </Badge>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function LuckCard({ luck }: { luck: LuckSummary }) {
+  const lucky = luck.luckIndex > 0;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Dice5 className="h-4 w-4 text-primary" /> Luck audit
+        </CardTitle>
+        <CardDescription>
+          Approximation using season xG90/xA90 × minutes — positive = you out-performed expectation.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <div
+          className={cn(
+            "flex items-center justify-between rounded border p-3",
+            lucky ? "border-emerald-500/40 bg-emerald-500/10" : "border-rose-500/40 bg-rose-500/10",
+          )}
+        >
+          <div>
+            <div className="text-[10px] uppercase text-muted-foreground">Luck index (starting XI)</div>
+            <div className="text-lg font-semibold font-mono">
+              {lucky ? "+" : ""}
+              {luck.luckIndex.toFixed(1)} pts
+            </div>
+          </div>
+          <Badge variant={lucky ? "success" : "destructive"}>{lucky ? "Lucky" : "Unlucky"}</Badge>
+        </div>
+        {(luck.topLucky.length > 0 || luck.topUnlucky.length > 0) && (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {luck.topLucky.length > 0 && (
+              <div className="rounded border bg-emerald-500/5 p-3">
+                <div className="mb-1 text-[10px] uppercase tracking-wide text-emerald-500">
+                  Over-performed
+                </div>
+                <ul className="space-y-0.5 text-xs">
+                  {luck.topLucky.map((p) => (
+                    <li key={p.playerId} className="flex justify-between gap-2">
+                      <span>
+                        {p.webName}{" "}
+                        <span className="text-muted-foreground">
+                          ({p.goalsActual}G+{p.assistsActual}A vs {p.xGExpected.toFixed(1)}xG+{p.xAExpected.toFixed(1)}xA)
+                        </span>
+                      </span>
+                      <span className="font-mono text-emerald-500">+{p.luckPts.toFixed(1)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {luck.topUnlucky.length > 0 && (
+              <div className="rounded border bg-rose-500/5 p-3">
+                <div className="mb-1 text-[10px] uppercase tracking-wide text-rose-500">
+                  Under-performed
+                </div>
+                <ul className="space-y-0.5 text-xs">
+                  {luck.topUnlucky.map((p) => (
+                    <li key={p.playerId} className="flex justify-between gap-2">
+                      <span>
+                        {p.webName}{" "}
+                        <span className="text-muted-foreground">
+                          ({p.goalsActual}G+{p.assistsActual}A vs {p.xGExpected.toFixed(1)}xG+{p.xAExpected.toFixed(1)}xA)
+                        </span>
+                      </span>
+                      <span className="font-mono text-rose-500">{p.luckPts.toFixed(1)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

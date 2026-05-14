@@ -68,7 +68,7 @@ export async function GET(req: NextRequest) {
     );
     const cleanRivalPicks = rivalPicks.filter((r): r is { entryId: number; picks: typeof userPicks } => r !== null);
 
-    const result = buildRetrospective(payload, userPicks, cleanRivalPicks, live);
+    const result = buildRetrospective(payload, userPicks, cleanRivalPicks, live, bs);
     return NextResponse.json({ ...result, snapshotTakenAt: snapshot.takenAt });
   } catch (err) {
     if (err instanceof FplError) {
