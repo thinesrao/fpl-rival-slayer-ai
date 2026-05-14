@@ -19,14 +19,36 @@ const CACHE_FIXTURES: CacheOpts = { revalidate: 3600, tags: ["fpl-fixtures"] };
 const CACHE_LIVE: CacheOpts = { revalidate: 300, tags: ["fpl-live"] }; // standings/picks/entry
 const CACHE_ELEMENT_SUMMARY: CacheOpts = { revalidate: 900, tags: ["fpl-element-summary"] };
 
+// Browser-like headers — FPL's bot filter 403s anything that looks
+// like a generic HTTP client. Keep the set tight: UA + the common
+// browser navigation headers a Chrome request would include.
+function fplHeaders(): HeadersInit {
+  return {
+    "User-Agent": env.FPL_USER_AGENT,
+    Accept: "application/json, text/plain, */*",
+    "Accept-Language": "en-GB,en;q=0.9",
+    Referer: "https://fantasy.premierleague.com/",
+    Origin: "https://fantasy.premierleague.com",
+  };
+}
+
+function explain403(path: string, body: string): string {
+  return (
+    `FPL 403 ${path}: blocked by upstream bot filter. ` +
+    `Override FPL_USER_AGENT with a current Chrome UA, or check that the ` +
+    `host IP isn't on a known data-centre block list. Body: ${body.slice(0, 120)}`
+  );
+}
+
 async function fplFetch<T>(path: string, cache: CacheOpts): Promise<T> {
   const url = `${BASE}${path}`;
   const res = await fetch(url, {
-    headers: { "User-Agent": env.FPL_USER_AGENT, Accept: "application/json" },
+    headers: fplHeaders(),
     next: { revalidate: cache.revalidate, tags: cache.tags },
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
+    if (res.status === 403) throw new FplError(403, explain403(path, text));
     throw new FplError(res.status, `FPL ${res.status} ${path}: ${text.slice(0, 200)}`);
   }
   return (await res.json()) as T;
@@ -56,11 +78,12 @@ export async function getBootstrap(): Promise<FplBootstrap> {
   bootstrapInflight = (async () => {
     const url = `${BASE}/bootstrap-static/`;
     const res = await fetch(url, {
-      headers: { "User-Agent": env.FPL_USER_AGENT, Accept: "application/json" },
+      headers: fplHeaders(),
       cache: "no-store",
     });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
+      if (res.status === 403) throw new FplError(403, explain403("/bootstrap-static/", text));
       throw new FplError(res.status, `FPL ${res.status} bootstrap-static: ${text.slice(0, 200)}`);
     }
     const data = (await res.json()) as FplBootstrap;

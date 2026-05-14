@@ -1,11 +1,15 @@
 import { z } from "zod";
 
+// FPL's bot filter rejects custom User-Agents (anything mentioning a repo URL
+// or "bot"/"crawler" gets 403'd). Default to a real Chrome string; override
+// via env var if you need something else.
+const CHROME_UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
 const schema = z.object({
   GEMINI_API_KEY: z.string().min(1).optional(),
   GEMINI_MODEL: z.string().default("gemini-2.5-pro"),
-  FPL_USER_AGENT: z
-    .string()
-    .default("fpl-rival-slayer-ai/0.1 (+https://github.com/thinesrao/fpl-rival-slayer-ai)"),
+  FPL_USER_AGENT: z.string().default(CHROME_UA),
 });
 
 const parsed = schema.safeParse({
@@ -20,7 +24,7 @@ if (!parsed.success) {
 
 export const env = parsed.success
   ? parsed.data
-  : { GEMINI_API_KEY: undefined, GEMINI_MODEL: "gemini-2.5-pro", FPL_USER_AGENT: "fpl-rival-slayer-ai/0.1" };
+  : { GEMINI_API_KEY: undefined, GEMINI_MODEL: "gemini-2.5-pro", FPL_USER_AGENT: CHROME_UA };
 
 export const aiEnabled = Boolean(env.GEMINI_API_KEY);
 
