@@ -14,11 +14,16 @@ import { DifferentialsCard } from "@/components/DifferentialsCard";
 import { ProjectionsChart } from "@/components/ProjectionsChart";
 import { OvertakeMeter } from "@/components/OvertakeMeter";
 import { RecommendationsPanel } from "@/components/RecommendationsPanel";
+import { ChatPanel } from "@/components/ChatPanel";
+import { PlanPanel } from "@/components/PlanPanel";
+import { WhatIfModal } from "@/components/WhatIfModal";
+import { RivalChipsPanel } from "@/components/RivalChipsPanel";
+import { LeagueHeatmap } from "@/components/LeagueHeatmap";
 import { IntelPanel } from "@/components/IntelPanel";
 import { RetrospectivePanel } from "@/components/RetrospectivePanel";
 import { LivePanel } from "@/components/LivePanel";
 import { NotificationToggle } from "@/components/NotificationToggle";
-import type { OvertakeOdds, RivalContext, SquadProjection } from "@/lib/types";
+import type { FplBootstrap, FplFixture, OvertakeOdds, RivalContext, SquadProjection } from "@/lib/types";
 import type { AiResult } from "@/lib/ai/gemini";
 import type { TransferSuggestion } from "@/lib/optimizer/transfers";
 import type { PlayerEo } from "@/lib/intel/effective-ownership";
@@ -45,10 +50,30 @@ interface AnalysisResponse {
   priceMoves?: PriceMoveReport;
 }
 
+interface HorizonGwResponse {
+  gw: number;
+  fixtures: FplFixture[];
+  user: SquadProjection;
+  rivals: SquadProjection[];
+  overtake: OvertakeOdds[];
+}
+
+interface CumulativeOvertakeResponse {
+  rivalEntryId: number;
+  rivalName: string;
+  pointsBehind: number;
+  userExpectedTotal: number;
+  rivalExpectedTotal: number;
+  expectedDelta: number;
+  overtakeProbability: number;
+}
+
 interface ProjectionsResponse {
   context: RivalContext;
   targetGw: number;
   projections: { gw: number; user: SquadProjection; rivals: SquadProjection[]; overtake: OvertakeOdds[] };
+  horizon?: { horizon: HorizonGwResponse[]; cumulative: CumulativeOvertakeResponse[] };
+  teams?: FplBootstrap["teams"];
   eo?: Record<number, PlayerEo>;
   priceMoves?: PriceMoveReport;
 }
@@ -126,6 +151,7 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
   };
 
   const [refreshSignal, setRefreshSignal] = useState(0);
+  const [whatIfOutId, setWhatIfOutId] = useState<number | null>(null);
 
   const refreshAll = async () => {
     setRefreshingAll(true);
@@ -236,18 +262,23 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
           <TabsTrigger value="squads">Squads</TabsTrigger>
           <TabsTrigger value="differentials">Differentials</TabsTrigger>
           <TabsTrigger value="projections">Projections</TabsTrigger>
+          <TabsTrigger value="plan">Plan</TabsTrigger>
           <TabsTrigger value="ai">AI Coach</TabsTrigger>
           <TabsTrigger value="live">Live</TabsTrigger>
           <TabsTrigger value="retrospective">Retrospective</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="squads" className="mt-4">
+        <TabsContent value="squads" className="mt-4 space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Tap any of your players to run a what-if swap simulation.
+          </p>
           <SquadCompareTable
             user={ctx.user}
             userProjection={projections.user}
             rivals={ctx.rivals}
             rivalProjections={projections.rivals}
             eo={eo}
+            onUserPlayerClick={(id) => setWhatIfOutId(id)}
           />
         </TabsContent>
 
@@ -257,6 +288,7 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
           ) : (
             <DifferentialsCard userOnly={diff.userOnly} rivalOnly={diff.rivalOnly} />
           )}
+          <LeagueHeatmap leagueId={leagueId} topN={10} />
           {eo && priceMoves && <IntelPanel eo={eo} priceMoves={priceMoves} />}
         </TabsContent>
 
@@ -270,6 +302,25 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
           <OvertakeMeter odds={projections.overtake} />
         </TabsContent>
 
+        <TabsContent value="plan" className="mt-4 space-y-4">
+          {data.horizon && data.teams ? (
+            <PlanPanel
+              horizon={data.horizon.horizon}
+              cumulative={data.horizon.cumulative}
+              context={ctx}
+              teams={data.teams}
+            />
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Plan horizon unavailable</CardTitle>
+                <CardDescription>Refresh to compute the next 3 gameweeks.</CardDescription>
+              </CardHeader>
+            </Card>
+          )}
+          <RivalChipsPanel teamId={teamId} leagueId={leagueId} />
+        </TabsContent>
+
         <TabsContent value="live" className="mt-4">
           <LivePanel teamId={teamId} leagueId={leagueId} refreshSignal={refreshSignal} />
         </TabsContent>
@@ -278,7 +329,7 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
           <RetrospectivePanel teamId={teamId} leagueId={leagueId} />
         </TabsContent>
 
-        <TabsContent value="ai" className="mt-4">
+        <TabsContent value="ai" className="mt-4">{/* AI Coach tab content below */}
           {!aiEnabled ? (
             <Alert variant="warning">
               <AlertTitle>AI Coach disabled</AlertTitle>
@@ -295,28 +346,42 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
               <AlertDescription>{(analysisQuery.error as Error).message}</AlertDescription>
             </Alert>
           ) : ai ? (
-            <RecommendationsPanel
-              ai={ai}
-              freeTransfers={analysisQuery.data?.freeTransfers}
-              bank={analysisQuery.data?.bank}
-              cachedAt={analysisQuery.data?.cachedAt}
-              cacheStatus={analysisQuery.data?.cacheStatus}
-              refreshing={refreshing}
-              onRefresh={() => refetchAnalysis(true)}
-            />
+            <div className="space-y-6">
+              <RecommendationsPanel
+                ai={ai}
+                freeTransfers={analysisQuery.data?.freeTransfers}
+                bank={analysisQuery.data?.bank}
+                cachedAt={analysisQuery.data?.cachedAt}
+                cacheStatus={analysisQuery.data?.cacheStatus}
+                refreshing={refreshing}
+                onRefresh={() => refetchAnalysis(true)}
+              />
+              <ChatPanel teamId={teamId} leagueId={leagueId} />
+            </div>
           ) : (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Run AI analysis</CardTitle>
-                <CardDescription>Click refresh to query Gemini with the latest news.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button onClick={() => refetchAnalysis(false)}>Run analysis</Button>
-              </CardContent>
-            </Card>
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Run AI analysis</CardTitle>
+                  <CardDescription>Click refresh to query Gemini with the latest news.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button onClick={() => refetchAnalysis(false)}>Run analysis</Button>
+                </CardContent>
+              </Card>
+              <ChatPanel teamId={teamId} leagueId={leagueId} />
+            </div>
           )}
         </TabsContent>
       </Tabs>
+
+      <WhatIfModal
+        open={whatIfOutId !== null}
+        onClose={() => setWhatIfOutId(null)}
+        teamId={teamId}
+        leagueId={leagueId}
+        outPlayerId={whatIfOutId}
+      />
     </div>
   );
 }

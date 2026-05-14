@@ -282,3 +282,91 @@ Use price intel ONLY to break ties (e.g. between two equally-good transfer-in ta
 export function summarizeProjectionForDigest(p: PlayerProjection): string {
   return `${p.webName} (${p.position}) xP=${p.xPoints} FDR=${p.fixtureDifficulty}${p.notes.length ? " — " + p.notes.join("; ") : ""}`;
 }
+
+// ----- Chat (multi-turn co-pilot) -----------------------------------------
+
+export const CHAT_SYSTEM_INSTRUCTION = `You are the same elite Fantasy Premier League strategist the user already consulted for their structured analysis. They are now in a multi-turn conversation with you about that same team and mini-league. Your sole objective stays the same: help them overtake the rivals immediately above them in the table.
+
+Conversation rules:
+- Replies are PLAIN MARKDOWN — no JSON, no code fences around the whole answer. Use **bold** for player names you recommend and bullet lists for options.
+- Keep replies tight: ≤200 words by default, fewer if the question is simple. Never pad.
+- The "## Context" block in the FIRST user message is your source of truth for squad, rivals, fixtures, EO, bank, free transfers, and projections. Do not contradict it. If the user asks about a player you can't find in that context, say so.
+- Use Google Search ONLY when the user explicitly asks for latest news, injury status, press conferences, or lineup updates. Cite sources inline as [source](url) when you do.
+- When the user proposes a hypothetical ("what if I captain X?"), reason about it concretely using the projection numbers in the context (xP, σ, EO, captainEO).
+- Honour the free-transfer count in the context. A -4 hit is only worth it if the projected gain is materially > 4 pts AND it raises overtake probability.
+- If the user asks about a future GW beyond the horizon in the context, say you only have visibility for the listed GWs and note what would tip the decision.`;
+
+export interface ChatContextArgs {
+  gw: number;
+  deadline: string;
+  ctx: import("@/lib/types").RivalContext;
+  userProjection: SquadProjection;
+  rivalProjections: SquadProjection[];
+  overtake: OvertakeOdds[];
+  fixtures: FplFixture[];
+  bs: FplBootstrap;
+  bank: number;
+  freeTransfers: number;
+  eo?: import("@/lib/intel/effective-ownership").EoMap;
+}
+
+export function buildChatContextBlock(args: ChatContextArgs): string {
+  const { gw, deadline, ctx, userProjection, rivalProjections, overtake, fixtures, bs, bank, freeTransfers, eo } = args;
+  const teamsById = new Map(bs.teams.map((t) => [t.id, t]));
+
+  const rivalLines = ctx.rivals
+    .map((r, i) => {
+      const proj = rivalProjections[i];
+      const odds = overtake.find((o) => o.rivalEntryId === r.entry.id);
+      return `  - ${r.entry.name} (${r.entry.player_name}): ${odds?.pointsBehind ?? "?"} pts ahead · projected XI ${proj?.startingXIPoints.toFixed(1) ?? "?"} · captain ${r.captain?.player.web_name ?? "?"} · overtake ${odds ? Math.round(odds.overtakeProbability * 100) + "%" : "?"}`;
+    })
+    .join("\n");
+
+  const userSquadLine = ctx.user.picks
+    .map((s) => {
+      const xp = userProjection.perPlayer.find((p) => p.playerId === s.player.id)?.xPoints;
+      const marker = s.pick.is_captain ? " (C)" : s.pick.is_vice_captain ? " (VC)" : "";
+      const bench = s.pick.multiplier === 0 ? " [BENCH]" : "";
+      return `  - ${s.position} ${s.player.web_name} (${s.team.short_name}, £${(s.player.now_cost / 10).toFixed(1)}m, xP=${typeof xp === "number" ? xp.toFixed(1) : "?"})${marker}${bench}`;
+    })
+    .join("\n");
+
+  const fixturesBlock_ = fixtures.length
+    ? fixtures
+        .map((f) => {
+          const h = teamsById.get(f.team_h)?.short_name ?? "?";
+          const a = teamsById.get(f.team_a)?.short_name ?? "?";
+          return `  ${h} vs ${a} (FDR ${f.team_h_difficulty}-${f.team_a_difficulty})`;
+        })
+        .join("\n")
+    : "  (blank gameweek)";
+
+  const captainThreats = eo
+    ? Object.values(eo)
+        .filter((p) => !p.ownedByUser && p.captainEoPct > 30)
+        .sort((a, b) => b.captainEoPct - a.captainEoPct)
+        .slice(0, 5)
+        .map((p) => `  - ${p.webName}: captainEO ${p.captainEoPct.toFixed(0)}%`)
+        .join("\n")
+    : "  (n/a)";
+
+  return `## Context for this conversation (assume this is current truth)
+Mini-league: ${ctx.leagueName}
+Gameweek ${gw} deadline: ${deadline}
+Bank: £${(bank / 10).toFixed(1)}m · Free transfers: ${freeTransfers}
+
+### Fixtures (authoritative for this GW)
+${fixturesBlock_}
+
+### User squad — ${ctx.user.entry.name} (rank #${ctx.user.entry.rank}, ${ctx.user.entry.total} pts)
+Projected XI: ${userProjection.startingXIPoints.toFixed(1)} (σ ${userProjection.stdev.toFixed(1)})
+${userSquadLine}
+
+### Rivals to overtake (closest first)
+${rivalLines}
+
+### Rival captain threats (you don't own; high captainEO)
+${captainThreats}
+
+Answer in markdown, ≤200 words. When the user asks "what if…", run the numbers using the xP values above and explain the trade-off.`;
+}

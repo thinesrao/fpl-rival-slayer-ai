@@ -14,6 +14,7 @@ interface Props {
   rivals: ManagerSquad[];
   rivalProjections: SquadProjection[];
   eo?: Record<number, PlayerEo>;
+  onUserPlayerClick?: (playerId: number) => void;
 }
 
 function projByPlayer(proj: SquadProjection) {
@@ -59,11 +60,13 @@ function PlayerSide({
   proj,
   eo,
   highlight,
+  onClick,
 }: {
   slot: SquadSlot | undefined;
   proj: PlayerProjection | undefined;
   eo: PlayerEo | undefined;
   highlight: "advantage" | "threat" | "shared" | "none";
+  onClick?: () => void;
 }) {
   if (!slot) {
     return <div className="min-h-[52px] p-2 text-xs text-muted-foreground/40">—</div>;
@@ -78,8 +81,23 @@ function PlayerSide({
   // EO badge tone: green when truly differential (≤25%), amber when template (≥75%).
   const eoTone =
     !eo ? null : eo.eoPct >= 75 ? "warning" : eo.eoPct <= 25 ? "success" : "outline";
+  const Tag = onClick ? "button" : "div";
   return (
-    <div className={cn("flex min-h-[52px] flex-col gap-0.5 p-2", benched && "opacity-60", bg)}>
+    <Tag
+      {...(onClick
+        ? {
+            type: "button" as const,
+            onClick,
+            title: "What if you swapped this player?",
+          }
+        : {})}
+      className={cn(
+        "flex min-h-[52px] w-full flex-col gap-0.5 p-2 text-left",
+        benched && "opacity-60",
+        bg,
+        onClick && "cursor-pointer hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+      )}
+    >
       <div className="flex flex-wrap items-center gap-1">
         <span className="truncate text-sm font-medium leading-tight">{slot.player.web_name}</span>
         {slot.pick.is_captain && (
@@ -104,11 +122,11 @@ function PlayerSide({
           </Badge>
         )}
       </div>
-    </div>
+    </Tag>
   );
 }
 
-export function SquadCompareTable({ user, userProjection, rivals, rivalProjections, eo }: Props) {
+export function SquadCompareTable({ user, userProjection, rivals, rivalProjections, eo, onUserPlayerClick }: Props) {
   const [idx, setIdx] = useState(0);
   if (rivals.length === 0 || rivalProjections.length === 0) {
     return (
@@ -221,6 +239,11 @@ export function SquadCompareTable({ user, userProjection, rivals, rivalProjectio
                       proj={row.user && userMap.get(row.user.player.id)}
                       eo={row.user && eo ? eo[row.user.player.id] : undefined}
                       highlight={row.shared ? "shared" : row.user ? "advantage" : "none"}
+                      onClick={
+                        row.user && onUserPlayerClick
+                          ? () => onUserPlayerClick(row.user!.player.id)
+                          : undefined
+                      }
                     />
                   ))}
                 </div>

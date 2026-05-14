@@ -4,7 +4,9 @@
 // per-rival points gained/lost.
 
 import type { FplLive } from "@/lib/fpl/client";
-import type { FplPicksResponse, ManagerSquad, OvertakeOdds, SquadProjection } from "@/lib/types";
+import type { FplBootstrap, FplPicksResponse, ManagerSquad, OvertakeOdds, SquadProjection } from "@/lib/types";
+import { computeLuck, type LuckSummary } from "./luck";
+import { computeCaptainRoi, type CaptainRoi } from "./captain-roi";
 
 interface SnapshotPayload {
   context: { user: ManagerSquad; rivals: ManagerSquad[]; leagueName: string };
@@ -56,6 +58,8 @@ export interface RetrospectiveResult {
     transfersRecommended: number;
     note: string;
   };
+  luck?: LuckSummary;
+  captainRoi?: CaptainRoi;
 }
 
 function liveById(live: FplLive): Map<number, number> {
@@ -130,6 +134,7 @@ export function buildRetrospective(
   userFinalPicks: FplPicksResponse,
   rivalFinalPicks: Array<{ entryId: number; picks: FplPicksResponse }>,
   live: FplLive,
+  bs?: FplBootstrap,
 ): RetrospectiveResult {
   const user = buildManagerRetro(snapshot.context.user, snapshot.projections.user, userFinalPicks, live);
 
@@ -174,11 +179,25 @@ export function buildRetrospective(
     };
   }
 
+  // Luck + captain ROI need the bootstrap (per-90 xG/xA rates). Both are
+  // optional add-ons — callers without bs get the legacy retrospective.
+  let luck: LuckSummary | undefined;
+  let captainRoi: CaptainRoi | undefined;
+  if (bs) {
+    const userFinalMult = new Map<number, number>(
+      userFinalPicks.picks.map((p) => [p.element, p.multiplier]),
+    );
+    luck = computeLuck(snapshot.context.user, userFinalMult, live, bs);
+    captainRoi = computeCaptainRoi(snapshot.context.user, userFinalPicks, live);
+  }
+
   return {
     gw: snapshot.targetGw,
     leagueName: snapshot.context.leagueName,
     user,
     rivals,
     aiVerdict,
+    luck,
+    captainRoi,
   };
 }
