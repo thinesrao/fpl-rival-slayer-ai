@@ -8,6 +8,31 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { CalendarDays, ChevronDown, ChevronUp, ExternalLink, Newspaper, RefreshCcw, Search, ShieldAlert, Sparkles, Trophy } from "lucide-react";
 import type { AiResult } from "@/lib/ai/gemini";
+import { SuggestedSquadPitch } from "@/components/SuggestedSquadPitch";
+
+interface ResolvedPlayer {
+  webName: string;
+  playerId: number;
+  teamShort: string;
+  teamCode: number;
+  elementType: 1 | 2 | 3 | 4;
+  position: "GKP" | "DEF" | "MID" | "FWD";
+  cost: number;
+  xPoints: number;
+  opponent: string | null;
+  isCaptain: boolean;
+  isVice: boolean;
+  isIn: boolean;
+}
+
+interface SuggestedSquad {
+  startingXi: ResolvedPlayer[];
+  bench: ResolvedPlayer[];
+  totalXp: number;
+  bank: number;
+  freeTransfers: number;
+  formation: string;
+}
 
 const CONFIDENCE_TONE = {
   low: "destructive" as const,
@@ -47,9 +72,12 @@ interface Props {
   refreshing?: boolean;
   onRefresh?: () => void;
   userChips?: ChipStatus;
+  suggestedSquad?: SuggestedSquad;
+  targetGw?: number;
+  onPlayerClick?: (playerId: number, webName: string) => void;
 }
 
-export function RecommendationsPanel({ ai, freeTransfers, bank, cachedAt, cacheStatus, refreshing, onRefresh, userChips }: Props) {
+export function RecommendationsPanel({ ai, freeTransfers, bank, cachedAt, cacheStatus, refreshing, onRefresh, userChips, suggestedSquad, targetGw, onPlayerClick }: Props) {
   const [expanded, setExpanded] = useState(false);
   const rec = ai.recommendation;
   const totalHit = rec.transfers.reduce((acc, t) => acc + (t.hit_cost ?? 0), 0);
@@ -208,48 +236,78 @@ export function RecommendationsPanel({ ai, freeTransfers, bank, cachedAt, cacheS
         </Card>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Starting XI + bench</CardTitle>
-          <CardDescription>Bench is in autosub priority order: first outfield sub → GK sub.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-3">
-            {rec.starting_xi.map((name, i) => (
-              <li key={i} className="truncate">
-                <span className="text-muted-foreground">{i + 1}.</span> {name}
-              </li>
-            ))}
-          </ul>
-          {rec.bench && rec.bench.length > 0 && (
-            <>
-              <Separator className="my-3" />
-              <p className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">Bench (autosub order)</p>
-              <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-4">
-                {rec.bench.map((name, i) => (
-                  <li key={i} className="truncate">
-                    <Badge variant="outline" className="mr-1 px-1 py-0 text-[10px]">
-                      {i === rec.bench.length - 1 ? "GK" : `${i + 1}`}
-                    </Badge>
-                    {name}
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-          {rec.differentials_to_exploit.length > 0 && (
-            <>
-              <Separator className="my-3" />
-              <p className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">Differentials to exploit</p>
-              <div className="flex flex-wrap gap-1.5">
-                {rec.differentials_to_exploit.map((d) => (
-                  <Badge key={d} variant="outline">{d}</Badge>
-                ))}
+      {suggestedSquad ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Suggested squad</CardTitle>
+            <CardDescription>
+              The AI&apos;s recommended XI on the pitch. Tap any player to run a what-if swap.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <SuggestedSquadPitch
+              suggested={suggestedSquad}
+              onTileClick={onPlayerClick}
+              gw={targetGw}
+            />
+            {rec.differentials_to_exploit.length > 0 && (
+              <div>
+                <p className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">
+                  Differentials to exploit
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {rec.differentials_to_exploit.map((d) => (
+                    <Badge key={d} variant="outline">{d}</Badge>
+                  ))}
+                </div>
               </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Starting XI + bench</CardTitle>
+            <CardDescription>Bench is in autosub priority order: first outfield sub → GK sub.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-3">
+              {rec.starting_xi.map((name, i) => (
+                <li key={i} className="truncate">
+                  <span className="text-muted-foreground">{i + 1}.</span> {name}
+                </li>
+              ))}
+            </ul>
+            {rec.bench && rec.bench.length > 0 && (
+              <>
+                <Separator className="my-3" />
+                <p className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">Bench (autosub order)</p>
+                <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-4">
+                  {rec.bench.map((name, i) => (
+                    <li key={i} className="truncate">
+                      <Badge variant="outline" className="mr-1 px-1 py-0 text-[10px]">
+                        {i === rec.bench.length - 1 ? "GK" : `${i + 1}`}
+                      </Badge>
+                      {name}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            {rec.differentials_to_exploit.length > 0 && (
+              <>
+                <Separator className="my-3" />
+                <p className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">Differentials to exploit</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {rec.differentials_to_exploit.map((d) => (
+                    <Badge key={d} variant="outline">{d}</Badge>
+                  ))}
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
