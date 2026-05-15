@@ -7,7 +7,7 @@ import { GoogleGenAI, type GroundingMetadata } from "@google/genai";
 import { aiEnabled, env } from "@/lib/env";
 import { buildSystemInstruction, buildUserPrompt, computeSeasonLabel } from "./prompts";
 import { validateCitations } from "./citations";
-import { findingToInfeasible, validateAffordability } from "./affordability";
+import { reconcileTransfers } from "./affordability";
 import type {
   FplBootstrap,
   FplFixture,
@@ -26,8 +26,15 @@ export interface AiRecommendation {
     reason: string;
     rival_targeted?: string;
     hit_cost?: number;
-    /** Filled server-side by validateAffordability. Present when the swap
-     *  can't actually be executed (over budget, name mismatch, etc.). */
+    /** Filled server-side: when the AI's IN was over budget, we auto-swapped
+     *  to the best affordable upgrade at the same position. */
+    substituted?: {
+      original_in: string;
+      original_in_cost_tenths: number;
+      reason: string;
+    };
+    /** Filled server-side by validateAffordability. Present only when no
+     *  substitute could be applied (no affordable candidate available). */
     infeasible?: {
       shortfall_tenths: number;
       reason: string;
@@ -352,26 +359,29 @@ export async function askStrategist(args: AskStrategistArgs): Promise<AiResult> 
     );
   }
 
-  // Affordability check — Gemini doesn't know live FPL prices so it sometimes
-  // suggests an IN-player the user can't afford. Flag (don't drop) so the user
-  // sees what was proposed AND why it can't be executed.
-  const afford = validateAffordability(
-    recommendation.transfers.map((t) => ({ out: t.out, in: t.in })),
-    args.ctx.user,
-    args.bs,
-    args.bank,
-  );
-  recommendation.transfers = recommendation.transfers.map((t, i) => {
-    const f = afford.findings[i];
-    const infeasible = f ? findingToInfeasible(f) : undefined;
-    return infeasible ? { ...t, infeasible } : t;
+  // Affordability reconciliation — Gemini doesn't know live FPL prices so it
+  // sometimes suggests an IN-player the user can't afford. We walk the chain
+  // and auto-swap over-budget INs to the best same-position affordable
+  // upgrade. Anything still infeasible (no candidate available) keeps an
+  // explicit flag so the UI surfaces it.
+  const reconciled = reconcileTransfers({
+    transfers: recommendation.transfers.map((t) => ({
+      out: t.out,
+      in: t.in,
+      reason: t.reason,
+      rival_targeted: t.rival_targeted,
+      hit_cost: t.hit_cost,
+    })),
+    userSquad: args.ctx.user,
+    bs: args.bs,
+    fixtures: args.fixtures,
+    gw: args.gw,
+    startingBank: args.bank,
   });
-  if (!afford.allFeasible) {
+  recommendation.transfers = reconciled.transfers;
+  if (reconciled.summary.substituted > 0 || reconciled.summary.stillInfeasible > 0) {
     console.warn(
-      "[ai] flagged infeasible transfers",
-      afford.findings
-        .filter((f) => !f.feasible)
-        .map((f) => ({ idx: f.index, reason: f.reason })),
+      `[ai] transfer reconciliation: substituted=${reconciled.summary.substituted} stillInfeasible=${reconciled.summary.stillInfeasible}`,
     );
   }
 

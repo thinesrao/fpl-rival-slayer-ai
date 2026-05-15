@@ -184,19 +184,27 @@ export function RecommendationsPanel({ ai, freeTransfers, bank, cachedAt, cacheS
           ) : (
             rec.transfers.map((t, i) => {
               const bad = t.infeasible;
+              const sub = t.substituted;
               return (
                 <div
                   key={i}
                   className={
                     bad
                       ? "rounded-md border border-destructive/60 bg-destructive/10 p-3"
-                      : "rounded-md border bg-muted/40 p-3"
+                      : sub
+                        ? "rounded-md border border-amber-500/50 bg-amber-500/5 p-3"
+                        : "rounded-md border bg-muted/40 p-3"
                   }
                 >
                   <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
                     <Badge variant="destructive">OUT {t.out}</Badge>
                     <span>→</span>
                     <Badge variant={bad ? "outline" : "success"}>IN {t.in}</Badge>
+                    {sub ? (
+                      <Badge variant="warning" title={sub.reason}>
+                        auto-swapped from {sub.original_in}
+                      </Badge>
+                    ) : null}
                     {bad ? (
                       <Badge variant="destructive">
                         Over budget by £{(bad.shortfall_tenths / 10).toFixed(1)}m
@@ -208,9 +216,14 @@ export function RecommendationsPanel({ ai, freeTransfers, bank, cachedAt, cacheS
                     ) : null}
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">{t.reason}</p>
+                  {sub && (
+                    <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                      ℹ {sub.reason}
+                    </p>
+                  )}
                   {bad && (
                     <p className="mt-1 text-xs font-medium text-destructive">
-                      ⚠ {bad.reason} — pick a cheaper alternative.
+                      ⚠ {bad.reason}
                     </p>
                   )}
                 </div>
