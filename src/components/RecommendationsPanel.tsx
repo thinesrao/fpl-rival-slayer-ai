@@ -182,20 +182,40 @@ export function RecommendationsPanel({ ai, freeTransfers, bank, cachedAt, cacheS
           {rec.transfers.length === 0 ? (
             <p className="text-sm text-muted-foreground">Hold transfers — no high-conviction move available.</p>
           ) : (
-            rec.transfers.map((t, i) => (
-              <div key={i} className="rounded-md border bg-muted/40 p-3">
-                <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
-                  <Badge variant="destructive">OUT {t.out}</Badge>
-                  <span>→</span>
-                  <Badge variant="success">IN {t.in}</Badge>
-                  {t.hit_cost ? <Badge variant="warning">−{t.hit_cost} hit</Badge> : null}
-                  {t.rival_targeted ? (
-                    <Badge variant="outline" className="ml-auto">vs {t.rival_targeted}</Badge>
-                  ) : null}
+            rec.transfers.map((t, i) => {
+              const bad = t.infeasible;
+              return (
+                <div
+                  key={i}
+                  className={
+                    bad
+                      ? "rounded-md border border-destructive/60 bg-destructive/10 p-3"
+                      : "rounded-md border bg-muted/40 p-3"
+                  }
+                >
+                  <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                    <Badge variant="destructive">OUT {t.out}</Badge>
+                    <span>→</span>
+                    <Badge variant={bad ? "outline" : "success"}>IN {t.in}</Badge>
+                    {bad ? (
+                      <Badge variant="destructive">
+                        Over budget by £{(bad.shortfall_tenths / 10).toFixed(1)}m
+                      </Badge>
+                    ) : null}
+                    {t.hit_cost ? <Badge variant="warning">−{t.hit_cost} hit</Badge> : null}
+                    {t.rival_targeted ? (
+                      <Badge variant="outline" className="ml-auto">vs {t.rival_targeted}</Badge>
+                    ) : null}
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">{t.reason}</p>
+                  {bad && (
+                    <p className="mt-1 text-xs font-medium text-destructive">
+                      ⚠ {bad.reason} — pick a cheaper alternative.
+                    </p>
+                  )}
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">{t.reason}</p>
-              </div>
-            ))
+              );
+            })
           )}
         </CardContent>
       </Card>
