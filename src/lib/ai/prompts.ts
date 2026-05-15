@@ -12,6 +12,23 @@ import type {
 import type { TransferSuggestion } from "@/lib/optimizer/transfers";
 import type { EoMap } from "@/lib/intel/effective-ownership";
 import type { PriceMoveReport } from "@/lib/intel/price-changes";
+import type { ChipStatus } from "@/lib/intel/rival-chips";
+
+const CHIP_LONG_NAMES: Record<string, string> = {
+  wildcard: "Wildcard 1",
+  wildcard2: "Wildcard 2",
+  freehit: "Free Hit",
+  bboost: "Bench Boost",
+  "3xc": "Triple Captain",
+};
+
+const CHIP_OUTPUT_VALUE: Record<string, string> = {
+  wildcard: "wildcard",
+  wildcard2: "wildcard",
+  freehit: "free-hit",
+  bboost: "bench-boost",
+  "3xc": "triple-captain",
+};
 
 export const SYSTEM_INSTRUCTION = `You are an elite Fantasy Premier League strategist for the current Premier League season. Your *sole* objective is to help the user OVERTAKE the 2-3 mini-league rivals immediately above them in the table.
 
@@ -19,11 +36,12 @@ Hard rules:
 - The "Fixtures this gameweek" block in the user prompt is the AUTHORITATIVE list of matches for the upcoming deadline. NEVER reference any other fixture. If you find yourself about to say "Player X faces Team Y", you MUST verify the matchup against that block. If a player's team is not in the fixtures block, they have a BLANK gameweek and will score 0.
 - Use the Google Search tool ONLY for the latest injury, suspension, rotation, and press-conference news. Do NOT use search to look up fixtures — the fixtures block is the source of truth.
 - The season is the one in progress as of the deadline date in the prompt. Disregard knowledge of past or future seasons when discussing form, ownership, or fixtures.
-- Be specific. Recommend exact transfers (named OUT and named IN), an exact captain + vice, an exact starting XI, and a clear chip decision.
+- Be specific. Recommend exact transfers (named OUT and named IN), an exact captain + vice, an exact starting XI + bench order, and a clear chip decision.
 - Prefer "rival-targeting" moves: differentials only the rivals own (consider transferring in, or trust ours to differentiate), or rival captains we should not blindly mirror.
-- HONOUR THE FREE TRANSFER COUNT. The "Free transfers available" number is exact. Each transfer in your "transfers" list beyond that count incurs a -4 hit (set hit_cost on those transfers). Never silently exceed the FT count without explicit hit_cost values. If you only need 0-1 transfers, don't manufacture extra just to spend FT.
+- HONOUR THE FREE TRANSFER COUNT. The "Free transfers available" number is exact. Each transfer beyond that count incurs a -4 hit. Mark every hit transfer with \`hit_cost: 4\` (or 8 for the second extra, 12 for the third, etc.). If you only need 0-1 transfers, don't manufacture extra just to spend FT.
+- CONSIDER -4 HITS AGGRESSIVELY when they materially raise overtake probability. A hit is worth it when (a) the projected points gain from the move comfortably exceeds 4 over the horizon (this GW + the next 1-2), AND (b) the move raises P(overtake) vs the closest rival by ≥ ~3 percentage points. You MAY stack hits (-8, -12) only when each marginal hit independently clears that bar. Always justify hits explicitly in the reason and via hit_cost.
+- CHIP AVAILABILITY IS GIVEN in the "Chip wallet" block. ONLY recommend chips listed under "Remaining". If the user has no chips left (Remaining is empty), you MUST set \`chip.use\` to "none" and the reasoning must state plainly that all chips have been used this season — do NOT say "hold chips" in that case. Never suggest a chip the user has already played.
 - Pre-plan the next 2-3 gameweeks using the multi-GW fixture run-in. Populate \`multi_gw_plan\` with one entry per upcoming GW (including this one) describing the intended squad direction, any planned transfers, captain candidate, and rationale. Identify squad rotation that lines up players with the best fixtures over the horizon, not just this week.
-- Never recommend hits (-4 transfer cost) unless the projected gain comfortably exceeds the points cost AND it materially raises overtake probability.
 - Output a SINGLE JSON object that strictly matches the schema below. No prose, no commentary, no markdown. Begin your response with \`{\` and end with \`}\`. Do not wrap it in code fences. Do not add any text before \`{\` or after the final \`}\`. Every string value must be plain text (no inner JSON, no markdown).
 
 The JSON object MUST conform to this TypeScript schema:
@@ -39,7 +57,12 @@ type Output = {
   }>;
   captain: { pick: string; vice: string; reasoning: string };
   starting_xi: string[];                  // 11 web_names, GK then DEF then MID then FWD
+  bench: string[];                        // 4 web_names in autosub priority order:
+                                          // [first outfield sub, second outfield sub,
+                                          //  third outfield sub, GK sub]
   chip: {
+    // Set to "none" when no chip play is justified OR when the user has no
+    // chips remaining. Never name a chip not in the "Remaining" wallet.
     use: "wildcard" | "bench-boost" | "triple-captain" | "free-hit" | "none";
     reasoning: string;
   };
@@ -81,6 +104,34 @@ interface BuildUserPromptArgs {
   bs: FplBootstrap;
   eo: EoMap;
   priceMoves: PriceMoveReport;
+  userChips?: ChipStatus;
+  rivalChips?: Array<{ entryId: number; status: ChipStatus }>;
+}
+
+function chipWalletBlock(args: { user?: ChipStatus; rivals?: Array<{ entryId: number; status: ChipStatus }>; ctx: Array<ManagerSquad> }): string {
+  const lines: string[] = [];
+  if (!args.user) return "  (chip status unavailable for this season)";
+  const remaining = args.user.remaining.length
+    ? args.user.remaining.map((c) => `${CHIP_LONG_NAMES[c] ?? c} → JSON value "${CHIP_OUTPUT_VALUE[c] ?? "none"}"`).join(", ")
+    : "NONE — all chips already used this season";
+  const used = args.user.used.length
+    ? args.user.used.map((u) => `${CHIP_LONG_NAMES[u.chip] ?? u.chip} (used GW${u.gw})`).join(", ")
+    : "none yet";
+  lines.push(`User remaining: ${remaining}`);
+  lines.push(`User used:      ${used}`);
+  if (args.rivals && args.rivals.length) {
+    for (const r of args.rivals) {
+      const sq = args.ctx.find((s) => s.entry.id === r.entryId);
+      const rem = r.status.remaining.length
+        ? r.status.remaining.map((c) => CHIP_LONG_NAMES[c] ?? c).join(", ")
+        : "NONE";
+      const usd = r.status.used.length
+        ? r.status.used.map((u) => `${CHIP_LONG_NAMES[u.chip] ?? u.chip} GW${u.gw}`).join(", ")
+        : "none";
+      lines.push(`Rival ${sq?.entry.name ?? r.entryId}: remaining=${rem}; used=${usd}`);
+    }
+  }
+  return lines.join("\n");
 }
 
 /** opponent code (e.g. "BUR (H)") for `teamId` in the upcoming GW, or null if blank. */
@@ -146,6 +197,8 @@ export function buildUserPrompt(args: BuildUserPromptArgs): string {
     bs,
     eo,
     priceMoves,
+    userChips,
+    rivalChips,
   } = args;
 
   const teamsById = new Map(bs.teams.map((t) => [t.id, t]));
@@ -271,6 +324,14 @@ ${(() => {
   return hits.length ? hits.join("\n") : "  (none — squad value stable tonight)";
 })()}
 Use price intel ONLY to break ties (e.g. between two equally-good transfer-in targets, pick the one about to rise; consider timing of moves around the price-change run). NEVER chase a price rise at the cost of a worse footballing decision.
+
+## Chip wallet (AUTHORITATIVE — never recommend a chip the user has already used)
+${chipWalletBlock({ user: userChips, rivals: rivalChips, ctx: [user, ...rivals] })}
+
+Chip rules to apply:
+- If user "Remaining" is empty, set \`chip.use\` to "none" and the reasoning must state that all chips have been used this season. Do NOT say "hold chips" in that case.
+- If chips remain, evaluate playing one this GW only when it materially raises overtake odds vs the closest rival (e.g. Bench Boost in a DGW with ≥3 of your players doubling, Triple Captain on a high-EV captain in a DGW, Free Hit in a 4+ blank GW, Wildcard when ≥4 transfers are needed to fix the squad over the next 2 GWs).
+- Otherwise set \`chip.use\` to "none".
 
 ## Your task
 1. Search the web for the latest pre-deadline news on every named player you reference (especially captain candidates and transfer targets). Look for press conferences, manager quotes, training reports, and confirmed lineups when available.

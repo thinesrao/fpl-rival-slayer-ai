@@ -48,6 +48,7 @@ interface AnalysisResponse {
   cacheStatus?: "hit" | "miss" | "refreshed";
   eo?: Record<number, PlayerEo>;
   priceMoves?: PriceMoveReport;
+  userChips?: { used: Array<{ chip: string; gw: number }>; remaining: string[] };
 }
 
 interface HorizonGwResponse {
@@ -355,6 +356,7 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
                 cacheStatus={analysisQuery.data?.cacheStatus}
                 refreshing={refreshing}
                 onRefresh={() => refetchAnalysis(true)}
+                userChips={analysisQuery.data?.userChips}
               />
               <ChatPanel teamId={teamId} leagueId={leagueId} />
             </div>

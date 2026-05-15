@@ -15,6 +15,7 @@ import { readAnalysis, writeAnalysis, writeSnapshot } from "@/lib/store/cache";
 import { storeEnabled } from "@/lib/store/redis";
 import { computeEffectiveOwnership } from "@/lib/intel/effective-ownership";
 import { computePriceMoves } from "@/lib/intel/price-changes";
+import { analyseChips } from "@/lib/intel/rival-chips";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -101,6 +102,27 @@ export async function GET(req: NextRequest) {
     const eo = computeEffectiveOwnership(context, bs);
     const priceMoves = computePriceMoves(bs);
 
+    // Chip wallet for the user (and optionally rivals) so the AI never
+    // recommends a chip that's already been played.
+    const userChips = analyseChips({
+      history: entryHistory ?? null,
+      squad: context.user,
+      bs,
+      horizonFixtures,
+    });
+    const rivalHistories = await Promise.all(
+      context.rivals.map((r) => getEntryHistory(r.entry.id).catch(() => null)),
+    );
+    const rivalChips = context.rivals.map((r, i) => ({
+      entryId: r.entry.id,
+      status: analyseChips({
+        history: rivalHistories[i],
+        squad: r,
+        bs,
+        horizonFixtures,
+      }),
+    }));
+
     const target = bs.events.find((e) => e.id === targetGw) ?? currentEvent(bs);
 
     const ai = await askStrategist({
@@ -119,6 +141,8 @@ export async function GET(req: NextRequest) {
       bs,
       eo,
       priceMoves,
+      userChips,
+      rivalChips,
     });
 
     const payload = {
@@ -133,6 +157,7 @@ export async function GET(req: NextRequest) {
       ai,
       eo,
       priceMoves,
+      userChips,
     };
 
     // Persist to cache + snapshot (best-effort; never blocks the response on failure).

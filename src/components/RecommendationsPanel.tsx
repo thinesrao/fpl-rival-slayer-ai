@@ -26,6 +26,18 @@ function formatAge(iso: string): string {
   return `${days}d ago`;
 }
 
+interface ChipStatus {
+  used: Array<{ chip: string; gw: number }>;
+  remaining: string[];
+}
+
+const CHIP_PRETTY: Record<string, string> = {
+  wildcard: "Wildcard",
+  "bench-boost": "Bench Boost",
+  "triple-captain": "Triple Captain",
+  "free-hit": "Free Hit",
+};
+
 interface Props {
   ai: AiResult;
   freeTransfers?: number;
@@ -34,12 +46,14 @@ interface Props {
   cacheStatus?: "hit" | "miss" | "refreshed";
   refreshing?: boolean;
   onRefresh?: () => void;
+  userChips?: ChipStatus;
 }
 
-export function RecommendationsPanel({ ai, freeTransfers, bank, cachedAt, cacheStatus, refreshing, onRefresh }: Props) {
+export function RecommendationsPanel({ ai, freeTransfers, bank, cachedAt, cacheStatus, refreshing, onRefresh, userChips }: Props) {
   const [expanded, setExpanded] = useState(false);
   const rec = ai.recommendation;
   const totalHit = rec.transfers.reduce((acc, t) => acc + (t.hit_cost ?? 0), 0);
+  const allChipsUsed = userChips ? userChips.remaining.length === 0 : false;
 
   return (
     <div className="space-y-4">
@@ -97,10 +111,27 @@ export function RecommendationsPanel({ ai, freeTransfers, bank, cachedAt, cacheS
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
-            <Badge variant={rec.chip.use === "none" ? "outline" : "default"}>
-              {rec.chip.use === "none" ? "Hold chips" : `Play ${rec.chip.use}`}
+            <Badge variant={allChipsUsed ? "secondary" : rec.chip.use === "none" ? "outline" : "default"}>
+              {allChipsUsed
+                ? "All chips used"
+                : rec.chip.use === "none"
+                  ? "Hold chips"
+                  : `Play ${CHIP_PRETTY[rec.chip.use] ?? rec.chip.use}`}
             </Badge>
-            <p className="text-muted-foreground">{rec.chip.reasoning}</p>
+            <p className="text-muted-foreground">
+              {allChipsUsed
+                ? `You've already played every chip this season (${userChips!.used.map((u) => `${u.chip} GW${u.gw}`).join(", ")}). No chip plays available — focus on transfers + captaincy.`
+                : rec.chip.reasoning}
+            </p>
+            {!allChipsUsed && userChips && userChips.remaining.length > 0 && (
+              <div className="flex flex-wrap gap-1 pt-1">
+                {userChips.remaining.map((c) => (
+                  <Badge key={c} variant="outline" className="px-1.5 py-0 text-[10px]">
+                    {c} available
+                  </Badge>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -109,7 +140,7 @@ export function RecommendationsPanel({ ai, freeTransfers, bank, cachedAt, cacheS
         <CardHeader>
           <CardTitle className="text-base">Transfers (this GW)</CardTitle>
           <CardDescription className="flex flex-wrap items-center gap-2">
-            <span>Each one targets a specific rival above you.</span>
+            <span>Each one targets a specific rival above you. -4 hits appear when the AI judges the points gain &gt; the deduction.</span>
             {typeof freeTransfers === "number" && (
               <Badge variant={rec.transfers.length > freeTransfers ? "warning" : "outline"}>
                 {rec.transfers.length} / {freeTransfers} free transfers
@@ -179,7 +210,8 @@ export function RecommendationsPanel({ ai, freeTransfers, bank, cachedAt, cacheS
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Starting XI</CardTitle>
+          <CardTitle className="text-base">Starting XI + bench</CardTitle>
+          <CardDescription>Bench is in autosub priority order: first outfield sub → GK sub.</CardDescription>
         </CardHeader>
         <CardContent>
           <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-3">
@@ -189,6 +221,22 @@ export function RecommendationsPanel({ ai, freeTransfers, bank, cachedAt, cacheS
               </li>
             ))}
           </ul>
+          {rec.bench && rec.bench.length > 0 && (
+            <>
+              <Separator className="my-3" />
+              <p className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">Bench (autosub order)</p>
+              <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-4">
+                {rec.bench.map((name, i) => (
+                  <li key={i} className="truncate">
+                    <Badge variant="outline" className="mr-1 px-1 py-0 text-[10px]">
+                      {i === rec.bench.length - 1 ? "GK" : `${i + 1}`}
+                    </Badge>
+                    {name}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
           {rec.differentials_to_exploit.length > 0 && (
             <>
               <Separator className="my-3" />
