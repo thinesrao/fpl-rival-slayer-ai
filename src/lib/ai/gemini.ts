@@ -27,6 +27,7 @@ export interface AiRecommendation {
   }>;
   captain: { pick: string; vice: string; reasoning: string };
   starting_xi: string[];
+  bench: string[];
   chip: {
     use: "wildcard" | "bench-boost" | "triple-captain" | "free-hit" | "none";
     reasoning: string;
@@ -150,6 +151,7 @@ function coerceRecommendation(parsed: unknown): AiRecommendation {
       reasoning: "",
     },
     starting_xi: Array.isArray(p.starting_xi) ? (p.starting_xi as string[]) : [],
+    bench: Array.isArray(p.bench) ? (p.bench as string[]) : [],
     chip: (p.chip as AiRecommendation["chip"]) ?? { use: "none", reasoning: "" },
     differentials_to_exploit: Array.isArray(p.differentials_to_exploit)
       ? (p.differentials_to_exploit as string[])
@@ -192,6 +194,8 @@ export interface AskStrategistArgs {
   bs: FplBootstrap;
   eo: import("@/lib/intel/effective-ownership").EoMap;
   priceMoves: import("@/lib/intel/price-changes").PriceMoveReport;
+  userChips?: import("@/lib/intel/rival-chips").ChipStatus;
+  rivalChips?: Array<{ entryId: number; status: import("@/lib/intel/rival-chips").ChipStatus }>;
 }
 
 export async function askStrategist(args: AskStrategistArgs): Promise<AiResult> {
@@ -214,6 +218,8 @@ export async function askStrategist(args: AskStrategistArgs): Promise<AiResult> 
     bs: args.bs,
     eo: args.eo,
     priceMoves: args.priceMoves,
+    userChips: args.userChips,
+    rivalChips: args.rivalChips,
   });
 
   const model = env.GEMINI_MODEL;
