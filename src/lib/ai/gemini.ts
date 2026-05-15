@@ -5,7 +5,7 @@
 
 import { GoogleGenAI, type GroundingMetadata } from "@google/genai";
 import { aiEnabled, env } from "@/lib/env";
-import { SYSTEM_INSTRUCTION, buildUserPrompt } from "./prompts";
+import { buildSystemInstruction, buildUserPrompt, computeSeasonLabel } from "./prompts";
 import { validateCitations } from "./citations";
 import type {
   FplBootstrap,
@@ -230,6 +230,12 @@ export async function askStrategist(args: AskStrategistArgs): Promise<AiResult> 
   });
 
   const model = env.GEMINI_MODEL;
+  const seasonLabel = computeSeasonLabel(args.deadline);
+  const systemInstruction = buildSystemInstruction({
+    seasonLabel,
+    gw: args.gw,
+    deadline: args.deadline,
+  });
 
   function extractText(resp: Awaited<ReturnType<typeof ai.models.generateContent>>) {
     const candidate = resp.candidates?.[0];
@@ -247,7 +253,7 @@ export async function askStrategist(args: AskStrategistArgs): Promise<AiResult> 
     model,
     contents: userPrompt,
     config: {
-      systemInstruction: SYSTEM_INSTRUCTION,
+      systemInstruction,
       temperature: 0.3,
       tools: [{ googleSearch: {} }],
       // Cap thinking so flash actually returns a final answer — with full
@@ -270,7 +276,7 @@ export async function askStrategist(args: AskStrategistArgs): Promise<AiResult> 
       model,
       contents: userPrompt,
       config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
+        systemInstruction,
         temperature: 0.3,
         thinkingConfig: { thinkingBudget: 1024 },
         maxOutputTokens: 16384,

@@ -6,7 +6,7 @@
 
 import { GoogleGenAI, type GroundingMetadata } from "@google/genai";
 import { aiEnabled, env } from "@/lib/env";
-import { CHAT_SYSTEM_INSTRUCTION, buildChatContextBlock } from "./prompts";
+import { buildChatContextBlock, buildChatSystemInstruction, computeSeasonLabel } from "./prompts";
 import type { ChatMessage } from "@/lib/store/chat";
 import type {
   FplBootstrap,
@@ -63,6 +63,12 @@ export async function askChat(
 ): Promise<ChatReply> {
   const ai = client();
   const model = env.GEMINI_MODEL;
+  const seasonLabel = computeSeasonLabel(context.deadline);
+  const systemInstruction = buildChatSystemInstruction({
+    seasonLabel,
+    gw: context.gw,
+    deadline: context.deadline,
+  });
 
   const contextBlock = buildChatContextBlock(context);
 
@@ -87,7 +93,7 @@ export async function askChat(
     model,
     contents,
     config: {
-      systemInstruction: CHAT_SYSTEM_INSTRUCTION,
+      systemInstruction,
       temperature: 0.4,
       tools: [{ googleSearch: {} }],
       thinkingConfig: { thinkingBudget: 1024 },
@@ -107,7 +113,7 @@ export async function askChat(
       model,
       contents,
       config: {
-        systemInstruction: CHAT_SYSTEM_INSTRUCTION,
+        systemInstruction,
         temperature: 0.4,
         thinkingConfig: { thinkingBudget: 512 },
         maxOutputTokens: 4096,
