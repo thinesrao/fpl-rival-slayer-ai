@@ -10,6 +10,7 @@ import type {
   SquadProjection,
 } from "@/lib/types";
 import type { TransferSuggestion } from "@/lib/optimizer/transfers";
+import type { TransferOption } from "@/lib/optimizer/transfer-options";
 import type { EoMap } from "@/lib/intel/effective-ownership";
 import type { PriceMoveReport } from "@/lib/intel/price-changes";
 import type { ChipStatus } from "@/lib/intel/rival-chips";
@@ -41,6 +42,25 @@ export function computeSeasonLabel(deadlineIso: string): string {
     : `${year - 1}/${String(year % 100).padStart(2, "0")}`;
 }
 
+function renderTransferOptionsBlock(opts: TransferOption[] | undefined): string {
+  if (!opts || opts.length === 0) {
+    return "  (no transfer options qualified — your squad already looks well-positioned; recommend 0 transfers)";
+  }
+  return opts
+    .map((o) => {
+      const overtake = o.overtakeImpact
+        .map(
+          (i) =>
+            `${i.rivalName.slice(0, 14)} ${(i.before * 100).toFixed(0)}%→${(i.after * 100).toFixed(0)}% (${i.delta >= 0 ? "+" : ""}${(i.delta * 100).toFixed(0)}pp)`,
+        )
+        .join("; ");
+      const notes = o.notes.length ? ` [${o.notes.join(", ")}]` : "";
+      return `  ${o.id} [${o.category}] OUT ${o.outWebName} (${o.outTeamShort}, £${(o.outCost / 10).toFixed(1)}m, xP ${o.outXp.toFixed(1)}) → IN ${o.inWebName} (${o.inTeamShort}, £${(o.inCost / 10).toFixed(1)}m, xP ${o.inXp.toFixed(1)})
+    Δ XI: ${o.netGainXi >= 0 ? "+" : ""}${o.netGainXi.toFixed(1)} | bank after: £${(o.postBank / 10).toFixed(1)}m | overtake: ${overtake || "n/a"}${notes}`;
+    })
+    .join("\n");
+}
+
 function seasonHeader(seasonLabel: string, gw: number, deadline?: string): string {
   return `=== ACTIVE PREMIER LEAGUE SEASON: ${seasonLabel} === UPCOMING DEADLINE: GAMEWEEK ${gw}${deadline ? ` (${deadline})` : ""} ===
 
@@ -64,10 +84,8 @@ Hard rules:
 - AFFORDABILITY (HARD CONSTRAINT — non-negotiable): every transfer MUST respect the bank. For each transfer in the order you list them, compute:
     bank_after = bank_before + out.now_cost − in.now_cost
     bank_after MUST be ≥ 0.
-  The user prompt provides "Affordability ceilings" per position AND an "Affordable upgrade pool" listing real, price-correct IN-candidates within budget. Restrict your IN-selections to:
-    (a) Players in the "Affordable upgrade pool" or "Heuristic transfer shortlist" blocks, OR
-    (b) Players whose £ price you ALREADY know is below the position's ceiling.
-  Do NOT recommend players whose current FPL price you don't know — FPL prices change frequently and your training-data knowledge is stale. A high-priced premium like Salah/Haaland/Gyökeres/Palmer typically costs £12-15m+ and most users CAN'T AFFORD them — verify against the ceiling before naming them. Server-side validation will flag any infeasible recommendation, so it's wasted advice.
+  The user prompt provides a "Pre-validated Transfer Options" menu (numbered OPT-XX) with options that are already affordable, position-correct, squad-rule-compliant, and overtake-scored per rival. Your transfer recommendations MUST come from this menu — set \`option_id\` on every transfer you emit. The \`out\` and \`in\` strings you emit MUST match the option's OUT/IN. DO NOT invent transfers outside the menu — the server resolves option_id to the canonical OUT/IN and substitutes/drops anything else.
+  Affordability ceilings and an "Affordable upgrade pool" are also provided as secondary guardrails if you need to reason about price; the menu is the authoritative source for what to actually recommend.
 - CONSIDER -4 HITS AGGRESSIVELY when they materially raise overtake probability. A hit is worth it when (a) the projected points gain from the move comfortably exceeds 4 over the horizon (this GW + the next 1-2), AND (b) the move raises P(overtake) vs the closest rival by ≥ ~3 percentage points. You MAY stack hits (-8, -12) only when each marginal hit independently clears that bar. Always justify hits explicitly in the reason and via hit_cost.
 - CHIP AVAILABILITY IS GIVEN in the "Chip wallet" block. ONLY recommend chips listed under "Remaining". If the user has no chips left (Remaining is empty), you MUST set \`chip.use\` to "none" and the reasoning must state plainly that all chips have been used this season — do NOT say "hold chips" in that case. Never suggest a chip the user has already played.
 - Pre-plan the next 2-3 gameweeks using the multi-GW fixture run-in. Populate \`multi_gw_plan\` with one entry per upcoming GW (including this one) describing the intended squad direction, any planned transfers, captain candidate, and rationale. Identify squad rotation that lines up players with the best fixtures over the horizon, not just this week.
@@ -78,9 +96,10 @@ The JSON object MUST conform to this TypeScript schema:
 type Output = {
   overall_strategy: string;              // 2-3 sentence plan
   transfers: Array<{
-    out: string;                          // FPL web_name
-    in: string;                           // FPL web_name
-    reason: string;
+    option_id: string;                    // OPT-XX from the "Pre-validated Transfer Options" menu — required for every transfer
+    out: string;                          // FPL web_name (must match the option's OUT)
+    in: string;                           // FPL web_name (must match the option's IN)
+    reason: string;                       // your news/context justification for picking THIS option over the others
     rival_targeted?: string;              // rival manager name this swap targets
     hit_cost?: number;                    // 0 if free, 4 if -4 hit, 8 if -8, etc.
   }>;
@@ -142,6 +161,7 @@ interface BuildUserPromptArgs {
   priceMoves: PriceMoveReport;
   userChips?: ChipStatus;
   rivalChips?: Array<{ entryId: number; status: ChipStatus }>;
+  transferOptions?: TransferOption[];
 }
 
 function chipWalletBlock(args: { user?: ChipStatus; rivals?: Array<{ entryId: number; status: ChipStatus }>; ctx: Array<ManagerSquad> }): string {
@@ -235,6 +255,7 @@ export function buildUserPrompt(args: BuildUserPromptArgs): string {
     priceMoves,
     userChips,
     rivalChips,
+    transferOptions,
   } = args;
 
   const teamsById = new Map(bs.teams.map((t) => [t.id, t]));
@@ -350,14 +371,17 @@ ${squadLine(user, userProjection, teamsById, fixtures)}
 ## Rivals immediately above the user
 ${rivalsBlock}
 
-## Affordability ceilings (HARD CONSTRAINT — every recommended IN must respect these)
+## Pre-validated Transfer Options (AUTHORITATIVE menu — every transfer you recommend MUST reference one of these by option_id)
+${renderTransferOptionsBlock(transferOptions)}
+
+## Affordability ceilings (secondary reference — the menu above already respects these)
 Current bank: £${(bank / 10).toFixed(1)}m
 ${affordabilityCeilings}
 
-## Affordable upgrade pool (top-ranked players you can ACTUALLY afford per position, sorted by form × ep_next)
+## Affordable upgrade pool (secondary reference — broader player pool by position, for sanity-checking context)
 ${affordablePoolBlock}
 
-## Heuristic transfer shortlist (pre-AI, you must validate with news; all entries already respect the bank)
+## Heuristic transfer shortlist (secondary reference — older heuristic, superseded by the Pre-validated Transfer Options menu)
 ${shortlistBlock}
 
 ## Differentials
