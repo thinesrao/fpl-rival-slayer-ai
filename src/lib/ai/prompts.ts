@@ -61,6 +61,13 @@ Hard rules:
 - Be specific. Recommend exact transfers (named OUT and named IN), an exact captain + vice, an exact starting XI + bench order, and a clear chip decision.
 - Prefer "rival-targeting" moves: differentials only the rivals own (consider transferring in, or trust ours to differentiate), or rival captains we should not blindly mirror.
 - HONOUR THE FREE TRANSFER COUNT. The "Free transfers available" number is exact. Each transfer beyond that count incurs a -4 hit. Mark every hit transfer with \`hit_cost: 4\` (or 8 for the second extra, 12 for the third, etc.). If you only need 0-1 transfers, don't manufacture extra just to spend FT.
+- AFFORDABILITY (HARD CONSTRAINT — non-negotiable): every transfer MUST respect the bank. For each transfer in the order you list them, compute:
+    bank_after = bank_before + out.now_cost − in.now_cost
+    bank_after MUST be ≥ 0.
+  The user prompt provides "Affordability ceilings" per position AND an "Affordable upgrade pool" listing real, price-correct IN-candidates within budget. Restrict your IN-selections to:
+    (a) Players in the "Affordable upgrade pool" or "Heuristic transfer shortlist" blocks, OR
+    (b) Players whose £ price you ALREADY know is below the position's ceiling.
+  Do NOT recommend players whose current FPL price you don't know — FPL prices change frequently and your training-data knowledge is stale. A high-priced premium like Salah/Haaland/Gyökeres/Palmer typically costs £12-15m+ and most users CAN'T AFFORD them — verify against the ceiling before naming them. Server-side validation will flag any infeasible recommendation, so it's wasted advice.
 - CONSIDER -4 HITS AGGRESSIVELY when they materially raise overtake probability. A hit is worth it when (a) the projected points gain from the move comfortably exceeds 4 over the horizon (this GW + the next 1-2), AND (b) the move raises P(overtake) vs the closest rival by ≥ ~3 percentage points. You MAY stack hits (-8, -12) only when each marginal hit independently clears that bar. Always justify hits explicitly in the reason and via hit_cost.
 - CHIP AVAILABILITY IS GIVEN in the "Chip wallet" block. ONLY recommend chips listed under "Remaining". If the user has no chips left (Remaining is empty), you MUST set \`chip.use\` to "none" and the reasoning must state plainly that all chips have been used this season — do NOT say "hold chips" in that case. Never suggest a chip the user has already played.
 - Pre-plan the next 2-3 gameweeks using the multi-GW fixture run-in. Populate \`multi_gw_plan\` with one entry per upcoming GW (including this one) describing the intended squad direction, any planned transfers, captain candidate, and rationale. Identify squad rotation that lines up players with the best fixtures over the horizon, not just this week.
@@ -268,10 +275,54 @@ ${squadLine(r, proj!, teamsById, fixtures)}`;
     ? shortlist
         .map(
           (s) =>
-            `  - ${s.position}: OUT ${s.out.name} (xP=${s.out.xPoints}, ${s.out.reason}) → IN ${s.in.name} (xP=${s.in.xPoints}, +${s.netGain.toFixed(1)})`,
+            `  - ${s.position}: OUT ${s.out.name} (£${(s.out.cost / 10).toFixed(1)}m, xP=${s.out.xPoints}, ${s.out.reason}) → IN ${s.in.name} (£${(s.in.cost / 10).toFixed(1)}m, xP=${s.in.xPoints}, +${s.netGain.toFixed(1)} net) [bank after swap: £${((bank + s.out.cost - s.in.cost) / 10).toFixed(1)}m]`,
         )
         .join("\n")
     : "  (none — squad already looks optimised before AI review)";
+
+  // Per-position affordability ceilings: max IN-player cost the user can
+  // afford after selling their CHEAPEST player in that position. Gives the
+  // AI concrete budget guardrails without needing to ship all of bs.elements.
+  const POS_ORDER: import("@/lib/types").Position[] = ["GKP", "DEF", "MID", "FWD"];
+  const affordabilityCeilings = POS_ORDER.map((pos) => {
+    const inPos = user.picks.filter((s) => s.position === pos);
+    if (inPos.length === 0) return `  - ${pos}: (none in squad)`;
+    const cheapest = inPos.reduce((a, b) => (a.player.now_cost <= b.player.now_cost ? a : b));
+    const ceiling = bank + cheapest.player.now_cost;
+    return `  - ${pos}: cheapest owned = ${cheapest.player.web_name} at £${(cheapest.player.now_cost / 10).toFixed(1)}m → MAX IN ${pos} price = £${(ceiling / 10).toFixed(1)}m (bank £${(bank / 10).toFixed(1)}m + £${(cheapest.player.now_cost / 10).toFixed(1)}m sale)`;
+  }).join("\n");
+
+  // Per-position top-5 AFFORDABLE upgrade pool from the FPL element list, so
+  // Gemini has explicit, price-correct alternatives instead of relying on
+  // training-data recall (which is stale on FPL price + transfers).
+  const POS_BY_ID: Record<number, import("@/lib/types").Position> = { 1: "GKP", 2: "DEF", 3: "MID", 4: "FWD" };
+  const userPlayerIds = new Set(user.picks.map((s) => s.player.id));
+  const affordablePoolBlock = POS_ORDER.map((pos) => {
+    const inPos = user.picks.filter((s) => s.position === pos);
+    if (inPos.length === 0) return `  ${pos}: (n/a)`;
+    const cheapest = inPos.reduce((a, b) => (a.player.now_cost <= b.player.now_cost ? a : b));
+    const ceiling = bank + cheapest.player.now_cost;
+    const cands = bs.elements
+      .filter((p) => POS_BY_ID[p.element_type] === pos)
+      .filter((p) => !userPlayerIds.has(p.id))
+      .filter((p) => p.status === "a" || p.status === "d")
+      .filter((p) => p.now_cost <= ceiling)
+      .map((p) => {
+        const team = teamsById.get(p.team);
+        return {
+          el: p,
+          team,
+          // Cheap proxy for xP: form * 1.2 + ep_next; we just need rank order.
+          rank: Number(p.form) * 1.2 + Number(p.ep_next),
+        };
+      })
+      .sort((a, b) => b.rank - a.rank)
+      .slice(0, 5)
+      .map((c) =>
+        `${c.el.web_name} [${c.team?.short_name ?? "?"}] £${(c.el.now_cost / 10).toFixed(1)}m`,
+      );
+    return `  ${pos} (max £${(ceiling / 10).toFixed(1)}m): ${cands.length ? cands.join(", ") : "(no affordable upgrades found)"}`;
+  }).join("\n");
 
   const deadlineYear = new Date(deadline).getUTCFullYear();
   const seasonLabel =
@@ -299,7 +350,14 @@ ${squadLine(user, userProjection, teamsById, fixtures)}
 ## Rivals immediately above the user
 ${rivalsBlock}
 
-## Heuristic transfer shortlist (pre-AI, you must validate with news)
+## Affordability ceilings (HARD CONSTRAINT — every recommended IN must respect these)
+Current bank: £${(bank / 10).toFixed(1)}m
+${affordabilityCeilings}
+
+## Affordable upgrade pool (top-ranked players you can ACTUALLY afford per position, sorted by form × ep_next)
+${affordablePoolBlock}
+
+## Heuristic transfer shortlist (pre-AI, you must validate with news; all entries already respect the bank)
 ${shortlistBlock}
 
 ## Differentials

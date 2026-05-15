@@ -7,6 +7,7 @@ import { GoogleGenAI, type GroundingMetadata } from "@google/genai";
 import { aiEnabled, env } from "@/lib/env";
 import { buildSystemInstruction, buildUserPrompt, computeSeasonLabel } from "./prompts";
 import { validateCitations } from "./citations";
+import { findingToInfeasible, validateAffordability } from "./affordability";
 import type {
   FplBootstrap,
   FplFixture,
@@ -25,6 +26,14 @@ export interface AiRecommendation {
     reason: string;
     rival_targeted?: string;
     hit_cost?: number;
+    /** Filled server-side by validateAffordability. Present when the swap
+     *  can't actually be executed (over budget, name mismatch, etc.). */
+    infeasible?: {
+      shortfall_tenths: number;
+      reason: string;
+      outCostTenths: number;
+      inCostTenths: number;
+    };
   }>;
   captain: { pick: string; vice: string; reasoning: string };
   starting_xi: string[];
@@ -340,6 +349,29 @@ export async function askStrategist(args: AskStrategistArgs): Promise<AiResult> 
     console.warn(
       "[ai] dropped stale-team citations",
       citationCheck.dropped.map((d) => ({ player: d.citation.player, reason: d.reason })),
+    );
+  }
+
+  // Affordability check — Gemini doesn't know live FPL prices so it sometimes
+  // suggests an IN-player the user can't afford. Flag (don't drop) so the user
+  // sees what was proposed AND why it can't be executed.
+  const afford = validateAffordability(
+    recommendation.transfers.map((t) => ({ out: t.out, in: t.in })),
+    args.ctx.user,
+    args.bs,
+    args.bank,
+  );
+  recommendation.transfers = recommendation.transfers.map((t, i) => {
+    const f = afford.findings[i];
+    const infeasible = f ? findingToInfeasible(f) : undefined;
+    return infeasible ? { ...t, infeasible } : t;
+  });
+  if (!afford.allFeasible) {
+    console.warn(
+      "[ai] flagged infeasible transfers",
+      afford.findings
+        .filter((f) => !f.feasible)
+        .map((f) => ({ idx: f.index, reason: f.reason })),
     );
   }
 
