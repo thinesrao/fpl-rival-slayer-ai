@@ -49,6 +49,40 @@ interface AnalysisResponse {
   eo?: Record<number, PlayerEo>;
   priceMoves?: PriceMoveReport;
   userChips?: { used: Array<{ chip: string; gw: number }>; remaining: string[] };
+  suggestedSquad?: {
+    startingXi: Array<{
+      webName: string;
+      playerId: number;
+      teamShort: string;
+      teamCode: number;
+      elementType: 1 | 2 | 3 | 4;
+      position: "GKP" | "DEF" | "MID" | "FWD";
+      cost: number;
+      xPoints: number;
+      opponent: string | null;
+      isCaptain: boolean;
+      isVice: boolean;
+      isIn: boolean;
+    }>;
+    bench: Array<{
+      webName: string;
+      playerId: number;
+      teamShort: string;
+      teamCode: number;
+      elementType: 1 | 2 | 3 | 4;
+      position: "GKP" | "DEF" | "MID" | "FWD";
+      cost: number;
+      xPoints: number;
+      opponent: string | null;
+      isCaptain: boolean;
+      isVice: boolean;
+      isIn: boolean;
+    }>;
+    totalXp: number;
+    bank: number;
+    freeTransfers: number;
+    formation: string;
+  };
 }
 
 interface HorizonGwResponse {
@@ -357,6 +391,11 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
                 refreshing={refreshing}
                 onRefresh={() => refetchAnalysis(true)}
                 userChips={analysisQuery.data?.userChips}
+                suggestedSquad={analysisQuery.data?.suggestedSquad}
+                targetGw={projections.gw}
+                onPlayerClick={(playerId) => {
+                  if (playerId > 0) setWhatIfOutId(playerId);
+                }}
               />
               <ChatPanel teamId={teamId} leagueId={leagueId} />
             </div>

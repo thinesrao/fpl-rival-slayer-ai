@@ -16,6 +16,7 @@ import { storeEnabled } from "@/lib/store/redis";
 import { computeEffectiveOwnership } from "@/lib/intel/effective-ownership";
 import { computePriceMoves } from "@/lib/intel/price-changes";
 import { analyseChips } from "@/lib/intel/rival-chips";
+import { resolveSuggestedSquad } from "@/lib/projections/resolve-suggested";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -145,6 +146,17 @@ export async function GET(req: NextRequest) {
       rivalChips,
     });
 
+    const suggestedSquad = resolveSuggestedSquad({
+      rec: ai.recommendation,
+      user: context.user,
+      userProjection: projections.user,
+      bs,
+      fixtures,
+      gw: targetGw,
+      bank,
+      freeTransfers,
+    });
+
     const payload = {
       context,
       targetGw,
@@ -158,6 +170,8 @@ export async function GET(req: NextRequest) {
       eo,
       priceMoves,
       userChips,
+      suggestedSquad,
+      fixtures, // upcoming-GW fixtures — small (~10 records), lets client resolve opponents
     };
 
     // Persist to cache + snapshot (best-effort; never blocks the response on failure).

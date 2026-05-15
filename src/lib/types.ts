@@ -10,6 +10,7 @@ export interface FplElementType {
 
 export interface FplTeam {
   id: number;
+  code: number; // numeric code used in kit-image URLs (separate from `id`)
   name: string;
   short_name: string;
   strength: number;
