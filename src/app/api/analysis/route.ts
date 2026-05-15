@@ -10,6 +10,7 @@ import { computeFreeTransfers } from "@/lib/fpl/free-transfers";
 import { buildProjections } from "@/lib/projections";
 import { projectPlayer } from "@/lib/projections/model";
 import { suggestTransfers } from "@/lib/optimizer/transfers";
+import { generateTransferOptions } from "@/lib/optimizer/transfer-options";
 import { askStrategist } from "@/lib/ai/gemini";
 import { readAnalysis, writeAnalysis, writeSnapshot } from "@/lib/store/cache";
 import { storeEnabled } from "@/lib/store/redis";
@@ -102,6 +103,17 @@ export async function GET(req: NextRequest) {
     const bank = entry?.last_deadline_bank ?? 0;
     const freeTransfers = entryHistory ? computeFreeTransfers(entryHistory).freeTransfers : 1;
     const shortlist = suggestTransfers(context.user, bank, bs, fixtures, targetGw);
+    const transferOptions = generateTransferOptions({
+      ctx: context,
+      userProjection: projections.user,
+      rivalProjections: projections.rivals,
+      baselineOvertake: projections.overtake,
+      bank,
+      bs,
+      fixtures,
+      gw: targetGw,
+      limit: 15,
+    });
     const eo = computeEffectiveOwnership(context, bs);
     const priceMoves = computePriceMoves(bs);
 
@@ -146,6 +158,7 @@ export async function GET(req: NextRequest) {
       priceMoves,
       userChips,
       rivalChips,
+      transferOptions,
     });
 
     const suggestedSquad = resolveSuggestedSquad({

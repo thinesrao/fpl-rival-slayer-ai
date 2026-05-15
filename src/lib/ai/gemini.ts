@@ -21,6 +21,9 @@ import type { TransferSuggestion } from "@/lib/optimizer/transfers";
 export interface AiRecommendation {
   overall_strategy: string;
   transfers: Array<{
+    /** OPT-XX id from the Pre-validated Transfer Options menu, if the AI
+     *  picked from the menu (the strongly preferred path). */
+    option_id?: string;
     out: string;
     in: string;
     reason: string;
@@ -219,6 +222,7 @@ export interface AskStrategistArgs {
   priceMoves: import("@/lib/intel/price-changes").PriceMoveReport;
   userChips?: import("@/lib/intel/rival-chips").ChipStatus;
   rivalChips?: Array<{ entryId: number; status: import("@/lib/intel/rival-chips").ChipStatus }>;
+  transferOptions?: import("@/lib/optimizer/transfer-options").TransferOption[];
 }
 
 export async function askStrategist(args: AskStrategistArgs): Promise<AiResult> {
@@ -243,6 +247,7 @@ export async function askStrategist(args: AskStrategistArgs): Promise<AiResult> 
     priceMoves: args.priceMoves,
     userChips: args.userChips,
     rivalChips: args.rivalChips,
+    transferOptions: args.transferOptions,
   });
 
   const model = env.GEMINI_MODEL;
@@ -364,6 +369,29 @@ export async function askStrategist(args: AskStrategistArgs): Promise<AiResult> 
   // and auto-swap over-budget INs to the best same-position affordable
   // upgrade. Anything still infeasible (no candidate available) keeps an
   // explicit flag so the UI surfaces it.
+  //
+  // Preferred path: AI references an option_id from the menu we gave it →
+  // we override OUT/IN with the option's canonical names, sidestepping any
+  // typos. Fallback path: AI emits free-form OUT/IN → reconcile by name +
+  // substitute if over budget.
+  const optionMap = new Map(
+    (args.transferOptions ?? []).map((o) => [o.id, o] as const),
+  );
+  let resolvedByOptionCount = 0;
+  recommendation.transfers = recommendation.transfers.map((t) => {
+    if (t.option_id && optionMap.has(t.option_id)) {
+      const o = optionMap.get(t.option_id)!;
+      resolvedByOptionCount++;
+      return { ...t, out: o.outWebName, in: o.inWebName };
+    }
+    return t;
+  });
+  if (resolvedByOptionCount > 0) {
+    console.info(
+      `[ai] resolved ${resolvedByOptionCount}/${recommendation.transfers.length} transfers via option_id`,
+    );
+  }
+
   const reconciled = reconcileTransfers({
     transfers: recommendation.transfers.map((t) => ({
       out: t.out,
