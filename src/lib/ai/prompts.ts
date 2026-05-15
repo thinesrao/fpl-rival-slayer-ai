@@ -30,7 +30,26 @@ const CHIP_OUTPUT_VALUE: Record<string, string> = {
   "3xc": "triple-captain",
 };
 
-export const SYSTEM_INSTRUCTION = `You are an elite Fantasy Premier League strategist for the current Premier League season. Your *sole* objective is to help the user OVERTAKE the 2-3 mini-league rivals immediately above them in the table.
+/** Derive the FPL season label (e.g. "2025/26") from a deadline ISO date.
+ *  FPL seasons start in early August, so anything from month >= 6 (July+)
+ *  belongs to the year-on-year season. */
+export function computeSeasonLabel(deadlineIso: string): string {
+  const d = new Date(deadlineIso);
+  const year = d.getUTCFullYear();
+  return d.getUTCMonth() >= 6
+    ? `${year}/${String((year + 1) % 100).padStart(2, "0")}`
+    : `${year - 1}/${String(year % 100).padStart(2, "0")}`;
+}
+
+function seasonHeader(seasonLabel: string, gw: number, deadline?: string): string {
+  return `=== ACTIVE PREMIER LEAGUE SEASON: ${seasonLabel} === UPCOMING DEADLINE: GAMEWEEK ${gw}${deadline ? ` (${deadline})` : ""} ===
+
+CRITICAL: every player→club mapping, fixture, form, ownership, and price reference MUST reflect the ${seasonLabel} season ONLY. Disregard your training-data knowledge of all PRIOR seasons (24/25 and earlier). If a search result or memory describes a player at a club they no longer play for in ${seasonLabel}, that source is STALE — discard it and use the data blocks in this prompt instead.
+
+`;
+}
+
+const SYSTEM_INSTRUCTION_BASE = `You are an elite Fantasy Premier League strategist for the current Premier League season. Your *sole* objective is to help the user OVERTAKE the 2-3 mini-league rivals immediately above them in the table.
 
 Hard rules:
 - The "Fixtures this gameweek" block in the user prompt is the AUTHORITATIVE list of matches for the upcoming deadline. NEVER reference any other fixture. If you find yourself about to say "Player X faces Team Y", you MUST verify the matchup against that block. If a player's team is not in the fixtures block, they have a BLANK gameweek and will score 0.
@@ -85,6 +104,13 @@ type Output = {
   news_citations: Array<{ player: string; summary: string; source_url?: string }>;
   confidence: "low" | "medium" | "high";
 };`;
+
+/** Build the analysis system instruction with an explicit season+GW header
+ *  prepended. Gemini ignores the user prompt's season label far more often
+ *  than the system instruction's. */
+export function buildSystemInstruction(args: { seasonLabel: string; gw: number; deadline?: string }): string {
+  return seasonHeader(args.seasonLabel, args.gw, args.deadline) + SYSTEM_INSTRUCTION_BASE;
+}
 
 interface BuildUserPromptArgs {
   gw: number;
@@ -253,14 +279,15 @@ ${squadLine(r, proj!, teamsById, fixtures)}`;
 
   const horizonGws = horizonFixtures.map((h) => h.gw);
 
-  return `Premier League season: ${seasonLabel}
-Gameweek ${gw} deadline: ${deadline}
+  return `>>> ACTIVE SEASON: ${seasonLabel} >>> UPCOMING DEADLINE: GAMEWEEK ${gw} (${deadline}) <<<
 Mini-league: ${leagueName}
 
-## Fixtures this gameweek (AUTHORITATIVE — every matchup is below; if a team isn't listed they have a BLANK gameweek)
+Every reference to a club, fixture, or ownership below is for the ${seasonLabel} season. If your training data suggests otherwise, the prompt wins.
+
+## Fixtures for Season ${seasonLabel} — Gameweek ${gw} (AUTHORITATIVE — every matchup is below; if a team isn't listed they have a BLANK gameweek)
 ${fixturesBlock(fixtures, teamsById)}
 
-## Fixture run-in for the next ${horizonGws.length} GWs (${horizonGws.join(", ")}) — per team (your + rival teams)
+## ${seasonLabel} fixture run-in for the next ${horizonGws.length} GWs (${horizonGws.join(", ")}) — per team (your + rival teams)
 Use this for planning rotations and lining up players with favourable runs. "BLANK" means no fixture that GW.
 ${horizonBlock}
 
@@ -349,7 +376,7 @@ export function summarizeProjectionForDigest(p: PlayerProjection): string {
 
 // ----- Chat (multi-turn co-pilot) -----------------------------------------
 
-export const CHAT_SYSTEM_INSTRUCTION = `You are the same elite Fantasy Premier League strategist the user already consulted for their structured analysis. They are now in a multi-turn conversation with you about that same team and mini-league. Your sole objective stays the same: help them overtake the rivals immediately above them in the table.
+const CHAT_SYSTEM_INSTRUCTION_BASE = `You are the same elite Fantasy Premier League strategist the user already consulted for their structured analysis. They are now in a multi-turn conversation with you about that same team and mini-league. Your sole objective stays the same: help them overtake the rivals immediately above them in the table.
 
 Conversation rules:
 - Replies are PLAIN MARKDOWN — no JSON, no code fences around the whole answer. Use **bold** for player names you recommend and bullet lists for options.
@@ -358,7 +385,12 @@ Conversation rules:
 - Use Google Search ONLY when the user explicitly asks for latest news, injury status, press conferences, or lineup updates. Cite sources inline as [source](url) when you do.
 - When the user proposes a hypothetical ("what if I captain X?"), reason about it concretely using the projection numbers in the context (xP, σ, EO, captainEO).
 - Honour the free-transfer count in the context. A -4 hit is only worth it if the projected gain is materially > 4 pts AND it raises overtake probability.
-- If the user asks about a future GW beyond the horizon in the context, say you only have visibility for the listed GWs and note what would tip the decision.`;
+- If the user asks about a future GW beyond the horizon in the context, say you only have visibility for the listed GWs and note what would tip the decision.
+- ALL references to player→club mappings, fixtures, form, ownership, and prices MUST reflect the active season shown in the header. NEVER assert a player plays for a club other than the one shown in the context block. If your training data conflicts with the context, the context wins.`;
+
+export function buildChatSystemInstruction(args: { seasonLabel: string; gw: number; deadline?: string }): string {
+  return seasonHeader(args.seasonLabel, args.gw, args.deadline) + CHAT_SYSTEM_INSTRUCTION_BASE;
+}
 
 export interface ChatContextArgs {
   gw: number;
@@ -414,12 +446,15 @@ export function buildChatContextBlock(args: ChatContextArgs): string {
         .join("\n")
     : "  (n/a)";
 
+  const seasonLabel = computeSeasonLabel(deadline);
   return `## Context for this conversation (assume this is current truth)
+>>> ACTIVE SEASON: ${seasonLabel} >>> GAMEWEEK ${gw} (deadline ${deadline}) <<<
 Mini-league: ${ctx.leagueName}
-Gameweek ${gw} deadline: ${deadline}
 Bank: £${(bank / 10).toFixed(1)}m · Free transfers: ${freeTransfers}
 
-### Fixtures (authoritative for this GW)
+All player→club mappings below are for the ${seasonLabel} season. NEVER assert a player plays for a different club than what's shown here, no matter what your training data says.
+
+### Fixtures for Season ${seasonLabel} — GW ${gw} (authoritative)
 ${fixturesBlock_}
 
 ### User squad — ${ctx.user.entry.name} (rank #${ctx.user.entry.rank}, ${ctx.user.entry.total} pts)
