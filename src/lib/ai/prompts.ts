@@ -36,6 +36,9 @@ Hard rules:
 - The "Fixtures this gameweek" block in the user prompt is the AUTHORITATIVE list of matches for the upcoming deadline. NEVER reference any other fixture. If you find yourself about to say "Player X faces Team Y", you MUST verify the matchup against that block. If a player's team is not in the fixtures block, they have a BLANK gameweek and will score 0.
 - Use the Google Search tool ONLY for the latest injury, suspension, rotation, and press-conference news. Do NOT use search to look up fixtures — the fixtures block is the source of truth.
 - The season is the one in progress as of the deadline date in the prompt. Disregard knowledge of past or future seasons when discussing form, ownership, or fixtures.
+- PLAYER → CLUB MAPPINGS in the User squad, Rivals, differentials, and fixtures blocks are AUTHORITATIVE for this season. Players transfer between seasons; the club shown next to each player's name is their CURRENT club. NEVER state in any field (overall_strategy, reasoning, citations, notes) that a player plays for a different club than what those blocks show.
+- For news_citations specifically: if a search result describes a player at a CLUB OTHER than the one shown in the squad/fixtures blocks, that source is STALE — discard it and find one for their current club. If you cannot find current-club news about a player, OMIT the citation entirely. Never fabricate a citation. Server-side validation will silently drop any citation that asserts a stale club, so save the round-trip and don't emit them.
+- For differentials_to_exploit: only use web_names that appear in the User squad OR one of the Rival squads OR the "Rival-only players to consider stealing" list. Do NOT invent names from training-data recall of past seasons.
 - Be specific. Recommend exact transfers (named OUT and named IN), an exact captain + vice, an exact starting XI + bench order, and a clear chip decision.
 - Prefer "rival-targeting" moves: differentials only the rivals own (consider transferring in, or trust ours to differentiate), or rival captains we should not blindly mirror.
 - HONOUR THE FREE TRANSFER COUNT. The "Free transfers available" number is exact. Each transfer beyond that count incurs a -4 hit. Mark every hit transfer with \`hit_cost: 4\` (or 8 for the second extra, 12 for the third, etc.). If you only need 0-1 transfers, don't manufacture extra just to spend FT.
@@ -96,8 +99,8 @@ interface BuildUserPromptArgs {
   freeTransfers: number;
   shortlist: TransferSuggestion[];
   differentials: {
-    userOnly: Array<{ name: string; xPts: number }>;
-    rivalOnly: Array<{ name: string; rival: string; xPts: number }>;
+    userOnly: Array<{ name: string; team?: string; xPts: number }>;
+    rivalOnly: Array<{ name: string; rival: string; team?: string; xPts: number }>;
   };
   fixtures: FplFixture[];
   horizonFixtures: Array<{ gw: number; fixtures: FplFixture[] }>;
@@ -273,8 +276,8 @@ ${rivalsBlock}
 ${shortlistBlock}
 
 ## Differentials
-User-only players: ${differentials.userOnly.map((d) => `${d.name} (xP ${d.xPts.toFixed(1)})`).join(", ") || "none"}
-Rival-only players to consider stealing: ${differentials.rivalOnly.map((d) => `${d.name} via ${d.rival} (xP ${d.xPts.toFixed(1)})`).join(", ") || "none"}
+User-only players: ${differentials.userOnly.map((d) => `${d.name}${d.team ? ` [${d.team}]` : ""} (xP ${d.xPts.toFixed(1)})`).join(", ") || "none"}
+Rival-only players to consider stealing: ${differentials.rivalOnly.map((d) => `${d.name}${d.team ? ` [${d.team}]` : ""} via ${d.rival} (xP ${d.xPts.toFixed(1)})`).join(", ") || "none"}
 
 ## Effective ownership in this mini-league (your squad vs rivals)
 EO% = (managers owning a player) / (1 + ${rivals.length} rivals). captainEO% adds the captain/triple-captain multiplier — anyone above 100% is a likely rival captain.

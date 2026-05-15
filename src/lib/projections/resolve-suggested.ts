@@ -65,7 +65,7 @@ function normalize(s: string): string {
   return s.toLowerCase().replace(/[^a-z]/g, "");
 }
 
-function findElementByWebName(name: string, bs: FplBootstrap): FplElement | null {
+export function findElementByWebName(name: string, bs: FplBootstrap): FplElement | null {
   // Exact match first; common case.
   const exact = bs.elements.find((e) => e.web_name === name);
   if (exact) return exact;
