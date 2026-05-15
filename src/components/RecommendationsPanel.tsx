@@ -322,8 +322,13 @@ export function RecommendationsPanel({ ai, freeTransfers, bank, cachedAt, cacheS
           ) : (
             rec.news_citations.map((c, i) => (
               <div key={i} className="flex flex-col gap-1 rounded-md border bg-muted/30 p-3">
-                <div className="flex items-center gap-2 text-sm font-medium">
+                <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
                   <span>{c.player}</span>
+                  {c.currentTeam && (
+                    <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+                      {c.currentTeam.short}
+                    </Badge>
+                  )}
                   {c.source_url && (
                     <a
                       href={c.source_url}

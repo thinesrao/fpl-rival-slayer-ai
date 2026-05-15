@@ -82,11 +82,13 @@ export async function GET(req: NextRequest) {
     // Compute xPts for differentials so the prompt is rich.
     const userOnlyEnriched = differentials.userOnly.slice(0, 6).map((s) => ({
       name: s.player.web_name,
+      team: s.team.short_name,
       xPts: projectPlayer({ player: s.player, team: s.team, position: s.position, fixtures, gw: targetGw, bs }).xPoints,
     }));
     const rivalOnlyEnriched = differentials.rivalOnly.slice(0, 8).map((r) => ({
       name: r.slot.player.web_name,
       rival: r.rivalName,
+      team: r.slot.team.short_name,
       xPts: projectPlayer({
         player: r.slot.player,
         team: r.slot.team,

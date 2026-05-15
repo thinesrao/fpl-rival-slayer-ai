@@ -6,6 +6,7 @@
 import { GoogleGenAI, type GroundingMetadata } from "@google/genai";
 import { aiEnabled, env } from "@/lib/env";
 import { SYSTEM_INSTRUCTION, buildUserPrompt } from "./prompts";
+import { validateCitations } from "./citations";
 import type {
   FplBootstrap,
   FplFixture,
@@ -40,7 +41,13 @@ export interface AiRecommendation {
     captain: string;
     notes: string;
   }>;
-  news_citations: Array<{ player: string; summary: string; source_url?: string }>;
+  news_citations: Array<{
+    player: string;
+    summary: string;
+    source_url?: string;
+    /** Current FPL team for the cited player; appended server-side after validation. */
+    currentTeam?: { name: string; short: string };
+  }>;
   confidence: "low" | "medium" | "high";
 }
 
@@ -186,8 +193,8 @@ export interface AskStrategistArgs {
   freeTransfers: number;
   shortlist: TransferSuggestion[];
   differentials: {
-    userOnly: Array<{ name: string; xPts: number }>;
-    rivalOnly: Array<{ name: string; rival: string; xPts: number }>;
+    userOnly: Array<{ name: string; team?: string; xPts: number }>;
+    rivalOnly: Array<{ name: string; rival: string; team?: string; xPts: number }>;
   };
   fixtures: FplFixture[];
   horizonFixtures: Array<{ gw: number; fixtures: FplFixture[] }>;
@@ -316,6 +323,18 @@ export async function askStrategist(args: AskStrategistArgs): Promise<AiResult> 
       ...c,
       source_url: c.source_url || grounding.chunks[i]?.uri,
     }));
+  }
+
+  // Validate citations against current FPL data — drops any that assert a
+  // wrong team for the cited player (Gemini stale-knowledge bleed), and tags
+  // survivors with their current club for display.
+  const citationCheck = validateCitations(recommendation.news_citations, args.bs);
+  recommendation.news_citations = citationCheck.kept;
+  if (citationCheck.dropped.length > 0) {
+    console.warn(
+      "[ai] dropped stale-team citations",
+      citationCheck.dropped.map((d) => ({ player: d.citation.player, reason: d.reason })),
+    );
   }
 
   return {
