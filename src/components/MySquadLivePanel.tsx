@@ -166,7 +166,7 @@ export function MySquadLivePanel({ teamId, leagueId, refreshSignal = 0 }: Props)
           style={{ background: "linear-gradient(to bottom, hsl(120 55% 32%), hsl(120 50% 27%))" }}
         >
           <PitchLines />
-          <div className="relative flex flex-col gap-3 px-2 py-4 sm:gap-4 sm:py-5">
+          <div className="relative flex flex-col gap-3 px-1 py-4 sm:gap-4 sm:px-2 sm:py-5">
             <Row players={gk} onClick={onTileClick} />
             <Row players={def} onClick={onTileClick} />
             <Row players={mid} onClick={onTileClick} />
@@ -273,7 +273,7 @@ function PitchLines() {
 function Row({ players, onClick }: { players: LivePlayer[]; onClick: (p: LivePlayer) => void }) {
   if (players.length === 0) return null;
   return (
-    <div className="flex justify-around gap-1 sm:gap-2">
+    <div className="flex w-full justify-around gap-0.5 sm:gap-1.5">
       {players.map((p) => (
         <Tile key={p.playerId} player={p} onClick={() => onClick(p)} />
       ))}
@@ -296,8 +296,8 @@ function Tile({ player, onClick, small = false }: { player: LivePlayer; onClick:
       onClick={onClick}
       title={player.webName}
       className={cn(
-        "relative flex flex-col items-center gap-0.5 transition-transform hover:scale-[1.03] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white",
-        small ? "w-[68px]" : "w-[72px] sm:w-[84px]",
+        "relative flex min-w-0 flex-1 basis-0 flex-col items-center gap-0.5 transition-transform hover:scale-[1.03] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white",
+        small ? "max-w-[78px]" : "max-w-[88px]",
         player.autosubbedOut && "opacity-40",
         player.autosubbedIn && "ring-2 ring-emerald-400",
       )}
@@ -378,9 +378,9 @@ function BenchStrip({ bench, onClick }: { bench: LivePlayer[]; onClick: (p: Live
       <div className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
         Bench (autosub order)
       </div>
-      <div className="flex justify-around gap-1 sm:gap-2">
+      <div className="flex w-full justify-around gap-0.5 sm:gap-1.5">
         {bench.map((p, i) => (
-          <div key={p.playerId} className="flex flex-col items-center gap-1">
+          <div key={p.playerId} className="flex min-w-0 flex-1 basis-0 max-w-[88px] flex-col items-center gap-1">
             <div className="text-[9px] font-semibold uppercase text-muted-foreground">
               {p.elementType === 1 ? "GKP" : `${i + 1}.${p.position}`}
             </div>
