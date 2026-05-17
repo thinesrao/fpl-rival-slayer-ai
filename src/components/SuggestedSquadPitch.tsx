@@ -67,7 +67,7 @@ export function SuggestedSquadPitch({ suggested, onTileClick, gw }: Props) {
       >
         <PitchLines />
 
-        <div className="relative flex flex-col gap-3 px-2 py-4 sm:gap-4 sm:py-5">
+        <div className="relative flex flex-col gap-3 px-1 py-4 sm:gap-4 sm:px-2 sm:py-5">
           <Row players={gk} onTileClick={onTileClick} />
           <Row players={def} onTileClick={onTileClick} />
           <Row players={mid} onTileClick={onTileClick} />
@@ -139,7 +139,7 @@ function Row({
 }) {
   if (players.length === 0) return null;
   return (
-    <div className="flex justify-around gap-1 sm:gap-2">
+    <div className="flex w-full justify-around gap-0.5 sm:gap-1.5">
       {players.map((p, i) => (
         <Tile key={`${p.playerId}-${i}`} player={p} onClick={onTileClick} />
       ))}
@@ -166,8 +166,8 @@ function Tile({
       onClick={clickable ? () => onClick!(player.playerId, player.webName) : undefined}
       title={clickable ? `What if you swapped ${player.webName}?` : player.webName}
       className={cn(
-        "relative flex flex-col items-center gap-0.5",
-        small ? "w-[68px]" : "w-[72px] sm:w-[84px]",
+        "relative flex min-w-0 flex-1 basis-0 flex-col items-center gap-0.5",
+        small ? "max-w-[78px]" : "max-w-[88px]",
         clickable && "cursor-pointer transition-transform hover:scale-[1.03] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white",
       )}
     >
@@ -246,9 +246,9 @@ function BenchStrip({
       <div className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
         Bench (autosub order)
       </div>
-      <div className="flex justify-around gap-1 sm:gap-2">
+      <div className="flex w-full justify-around gap-0.5 sm:gap-1.5">
         {bench.map((p, i) => (
-          <div key={`${p.playerId}-${i}`} className="flex flex-col items-center gap-1">
+          <div key={`${p.playerId}-${i}`} className="flex min-w-0 flex-1 basis-0 max-w-[88px] flex-col items-center gap-1">
             <div className="text-[9px] font-semibold uppercase text-muted-foreground">{labels[i]}</div>
             <Tile player={p} onClick={onTileClick} small />
           </div>
