@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Line, LineChart, ResponsiveContainer, Tooltip as ChartTooltip } from "recharts";
-import { ArrowDown, ArrowUp, ArrowUpFromLine, Award, Crown, Radio, RefreshCcw } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpFromLine, Radio, RefreshCcw } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { PlayerDetailModal } from "@/components/PlayerDetailModal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -87,9 +88,8 @@ async function fetchJson<T>(url: string): Promise<T> {
 }
 
 export function MySquadLivePanel({ teamId, leagueId, refreshSignal = 0 }: Props) {
-  void leagueId;
   const bustNextRef = useRef(false);
-  const [whatIfCaptainId, setWhatIfCaptainId] = useState<number | null>(null);
+  const [detailPlayerId, setDetailPlayerId] = useState<number | null>(null);
 
   const q = useQuery({
     queryKey: ["my-squad-live", teamId],
@@ -131,13 +131,20 @@ export function MySquadLivePanel({ teamId, leagueId, refreshSignal = 0 }: Props)
   const captain = data.starters.find((p) => p.isCaptain) ?? null;
 
   const onTileClick = (p: LivePlayer) => {
-    if (!p.isStarter) return;
-    if (p.isCaptain) {
-      setWhatIfCaptainId(null);
-      return;
-    }
-    setWhatIfCaptainId(whatIfCaptainId === p.playerId ? null : p.playerId);
+    if (p.playerId > 0) setDetailPlayerId(p.playerId);
   };
+
+  const detailPlayer = detailPlayerId
+    ? [...data.starters, ...data.bench].find((p) => p.playerId === detailPlayerId) ?? null
+    : null;
+  const captainSwapPreview =
+    detailPlayer && detailPlayer.isStarter && !detailPlayer.isCaptain && captain
+      ? {
+          currentCaptainName: captain.webName,
+          currentCaptainPoints: captain.livePoints,
+          candidatePoints: detailPlayer.livePoints,
+        }
+      : null;
 
   return (
     <Card>
@@ -167,16 +174,16 @@ export function MySquadLivePanel({ teamId, leagueId, refreshSignal = 0 }: Props)
           </div>
         </div>
 
-        {whatIfCaptainId !== null && captain && (
-          <CaptainSwapPanel
-            current={captain}
-            candidate={data.starters.find((p) => p.playerId === whatIfCaptainId) ?? null}
-            onClose={() => setWhatIfCaptainId(null)}
-          />
-        )}
-
         <BenchStrip bench={data.bench} onClick={onTileClick} />
       </CardContent>
+      <PlayerDetailModal
+        open={detailPlayerId !== null}
+        onClose={() => setDetailPlayerId(null)}
+        playerId={detailPlayerId}
+        teamId={teamId}
+        leagueId={leagueId}
+        captainSwap={captainSwapPreview}
+      />
     </Card>
   );
 }
@@ -385,55 +392,3 @@ function BenchStrip({ bench, onClick }: { bench: LivePlayer[]; onClick: (p: Live
   );
 }
 
-function CaptainSwapPanel({
-  current,
-  candidate,
-  onClose,
-}: {
-  current: LivePlayer;
-  candidate: LivePlayer | null;
-  onClose: () => void;
-}) {
-  if (!candidate) return null;
-  // Current captain contributes `livePoints × multiplier`. If we'd captained
-  // `candidate` instead, the candidate's contribution would be `livePoints × 2`
-  // and the (former) captain reverts to `livePoints × 1`.
-  const currentTotal = current.livePoints * (current.multiplier || 2) + candidate.livePoints * 1;
-  const newTotal = candidate.livePoints * 2 + current.livePoints * 1;
-  const delta = newTotal - currentTotal;
-  return (
-    <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3">
-      <div className="flex items-center justify-between gap-2 text-sm">
-        <div className="flex items-center gap-2">
-          <Crown className="h-4 w-4 text-amber-500" />
-          <span className="font-semibold">Captain-swap what-if</span>
-        </div>
-        <button type="button" onClick={onClose} className="text-xs text-muted-foreground hover:text-foreground">
-          close
-        </button>
-      </div>
-      <div className="mt-1.5 grid grid-cols-3 gap-2 text-xs">
-        <div className="rounded bg-card p-2">
-          <div className="text-[10px] uppercase text-muted-foreground">Current C: {current.webName}</div>
-          <div className="font-mono text-sm font-semibold">
-            {current.livePoints} × {current.multiplier || 2} = {current.livePoints * (current.multiplier || 2)} pts
-          </div>
-        </div>
-        <div className="rounded bg-card p-2">
-          <div className="text-[10px] uppercase text-muted-foreground">If C: {candidate.webName}</div>
-          <div className="font-mono text-sm font-semibold">
-            {candidate.livePoints} × 2 = {candidate.livePoints * 2} pts
-          </div>
-        </div>
-        <div className={cn("rounded p-2", delta > 0 ? "bg-emerald-500/15" : delta < 0 ? "bg-rose-500/15" : "bg-muted")}>
-          <div className="text-[10px] uppercase text-muted-foreground">Delta</div>
-          <div className={cn("flex items-center gap-1 font-mono text-sm font-semibold", delta > 0 ? "text-emerald-600 dark:text-emerald-400" : delta < 0 ? "text-rose-600 dark:text-rose-400" : "")}>
-            <Award className="h-3.5 w-3.5" />
-            {delta >= 0 ? "+" : ""}
-            {delta}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
