@@ -19,6 +19,7 @@ import { PlanPanel } from "@/components/PlanPanel";
 import { WhatIfModal } from "@/components/WhatIfModal";
 import { RivalChipsPanel } from "@/components/RivalChipsPanel";
 import { LeagueHeatmap } from "@/components/LeagueHeatmap";
+import { MatchesPanel } from "@/components/MatchesPanel";
 import { IntelPanel } from "@/components/IntelPanel";
 import { RetrospectivePanel } from "@/components/RetrospectivePanel";
 import { LivePanel } from "@/components/LivePanel";
@@ -300,6 +301,7 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
           <TabsTrigger value="plan">Plan</TabsTrigger>
           <TabsTrigger value="ai">AI Coach</TabsTrigger>
           <TabsTrigger value="live">Live</TabsTrigger>
+          <TabsTrigger value="matches">Matches</TabsTrigger>
           <TabsTrigger value="retrospective">Retrospective</TabsTrigger>
         </TabsList>
 
@@ -358,6 +360,10 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
 
         <TabsContent value="live" className="mt-4">
           <LivePanel teamId={teamId} leagueId={leagueId} refreshSignal={refreshSignal} />
+        </TabsContent>
+
+        <TabsContent value="matches" className="mt-4">
+          <MatchesPanel teamId={teamId} leagueId={leagueId} refreshSignal={refreshSignal} />
         </TabsContent>
 
         <TabsContent value="retrospective" className="mt-4">
