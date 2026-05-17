@@ -188,6 +188,8 @@ export interface FplLiveElement {
     ict_index: string;
     total_points: number;
     in_dreamteam: boolean;
+    /** 25/26+ FPL stat (CBI + tackles + recoveries). Absent on older seasons. */
+    defensive_contribution?: number;
   };
 }
 
