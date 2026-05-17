@@ -14,13 +14,15 @@ import { DifferentialsCard } from "@/components/DifferentialsCard";
 import { ProjectionsChart } from "@/components/ProjectionsChart";
 import { OvertakeMeter } from "@/components/OvertakeMeter";
 import { RecommendationsPanel } from "@/components/RecommendationsPanel";
-import { ChatPanel } from "@/components/ChatPanel";
 import { PlanPanel } from "@/components/PlanPanel";
 import { WhatIfModal } from "@/components/WhatIfModal";
 import { RivalChipsPanel } from "@/components/RivalChipsPanel";
 import { LeagueHeatmap } from "@/components/LeagueHeatmap";
 import { MatchesPanel } from "@/components/MatchesPanel";
 import { MySquadLivePanel } from "@/components/MySquadLivePanel";
+import { BottomNav, type TabId } from "@/components/BottomNav";
+import { MoreSheet } from "@/components/MoreSheet";
+import { FloatingChat } from "@/components/FloatingChat";
 import { IntelPanel } from "@/components/IntelPanel";
 import { RetrospectivePanel } from "@/components/RetrospectivePanel";
 import { LivePanel } from "@/components/LivePanel";
@@ -189,6 +191,8 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
 
   const [refreshSignal, setRefreshSignal] = useState(0);
   const [whatIfOutId, setWhatIfOutId] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState<TabId>("pitch");
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const refreshAll = async () => {
     setRefreshingAll(true);
@@ -244,7 +248,7 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
   const closestRival = projections.overtake[0];
 
   return (
-    <div className="container mx-auto px-4 py-6">
+    <div className="container mx-auto px-4 py-6 pb-24 md:pb-6">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <Link href="/" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
@@ -294,16 +298,16 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
         </div>
       )}
 
-      <Tabs defaultValue="squads">
-        <TabsList className="w-full justify-start overflow-x-auto">
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabId)}>
+        <TabsList className="hidden w-full justify-start overflow-x-auto md:flex">
+          <TabsTrigger value="pitch">Pitch</TabsTrigger>
+          <TabsTrigger value="plan">Plan</TabsTrigger>
+          <TabsTrigger value="matches">Matches</TabsTrigger>
           <TabsTrigger value="squads">Squads</TabsTrigger>
+          <TabsTrigger value="suggested">Suggested</TabsTrigger>
           <TabsTrigger value="differentials">Differentials</TabsTrigger>
           <TabsTrigger value="projections">Projections</TabsTrigger>
-          <TabsTrigger value="plan">Plan</TabsTrigger>
-          <TabsTrigger value="ai">AI Coach</TabsTrigger>
-          <TabsTrigger value="pitch">Pitch</TabsTrigger>
           <TabsTrigger value="live">Live</TabsTrigger>
-          <TabsTrigger value="matches">Matches</TabsTrigger>
           <TabsTrigger value="retrospective">Retrospective</TabsTrigger>
         </TabsList>
 
@@ -376,7 +380,7 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
           <RetrospectivePanel teamId={teamId} leagueId={leagueId} />
         </TabsContent>
 
-        <TabsContent value="ai" className="mt-4">{/* AI Coach tab content below */}
+        <TabsContent value="suggested" className="mt-4">{/* Suggested squad + transfers */}
           {!aiEnabled ? (
             <Alert variant="warning">
               <AlertTitle>AI Coach disabled</AlertTitle>
@@ -409,7 +413,6 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
                   if (playerId > 0) setWhatIfOutId(playerId);
                 }}
               />
-              <ChatPanel teamId={teamId} leagueId={leagueId} />
             </div>
           ) : (
             <div className="space-y-6">
@@ -422,7 +425,6 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
                   <Button onClick={() => refetchAnalysis(false)}>Run analysis</Button>
                 </CardContent>
               </Card>
-              <ChatPanel teamId={teamId} leagueId={leagueId} />
             </div>
           )}
         </TabsContent>
@@ -434,6 +436,26 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
         teamId={teamId}
         leagueId={leagueId}
         outPlayerId={whatIfOutId}
+      />
+
+      {/* Mobile-only bottom nav + More sheet */}
+      <BottomNav
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        onOpenMore={() => setMoreOpen(true)}
+      />
+      <MoreSheet
+        open={moreOpen}
+        onClose={() => setMoreOpen(false)}
+        onPick={(id) => setActiveTab(id)}
+      />
+
+      {/* Floating co-pilot chat — hidden on the Suggested tab where the
+       *  embedded recommendations panel is the focus. */}
+      <FloatingChat
+        teamId={teamId}
+        leagueId={leagueId}
+        hidden={activeTab === "suggested"}
       />
     </div>
   );
