@@ -1,0 +1,439 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Line, LineChart, ResponsiveContainer, Tooltip as ChartTooltip } from "recharts";
+import { ArrowDown, ArrowUp, ArrowUpFromLine, Award, Crown, Radio, RefreshCcw } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
+
+interface LivePlayer {
+  playerId: number;
+  webName: string;
+  teamShort: string;
+  teamCode: number;
+  elementType: 1 | 2 | 3 | 4;
+  position: "GKP" | "DEF" | "MID" | "FWD";
+  isStarter: boolean;
+  isCaptain: boolean;
+  isVice: boolean;
+  multiplier: number;
+  benchSlot: number | null;
+  livePoints: number;
+  pointsWithMultiplier: number;
+  minutes: number;
+  bonus: number;
+  provisionalBonus: number;
+  bps: number;
+  fixtureStatus: "upcoming" | "live" | "finished";
+  fixtureOpponent: string;
+  fixtureKickoffIso: string | null;
+  fixtureFdr: number;
+  autosubbedIn: boolean;
+  autosubbedOut: boolean;
+}
+
+interface LiveMetrics {
+  gwGrossPoints: number;
+  transferCost: number;
+  gwNetPoints: number;
+  transfersMade: number;
+  freeTransfers: number;
+  liveRank: number | null;
+  gwRank: number | null;
+  rankTrajectory: Array<{ gw: number; overallRank: number }>;
+}
+
+interface MySquadLive {
+  gw: number;
+  metrics: LiveMetrics;
+  starters: LivePlayer[];
+  bench: LivePlayer[];
+}
+
+interface Props {
+  teamId: number;
+  leagueId: number;
+  refreshSignal?: number;
+}
+
+const KIT_BASE = "https://fantasy.premierleague.com/dist/img/shirts/standard";
+function kitUrl(teamCode: number, isGk: boolean): string {
+  return `${KIT_BASE}/shirt_${teamCode}${isGk ? "_1" : ""}-66.png`;
+}
+
+function formatKickoff(iso: string | null): string {
+  if (!iso) return "TBC";
+  const d = new Date(iso);
+  return d.toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+function fdrTone(fdr: number): string {
+  if (fdr <= 2) return "bg-emerald-600/80 text-white";
+  if (fdr === 3) return "bg-slate-600/70 text-white";
+  if (fdr === 4) return "bg-rose-600/80 text-white";
+  return "bg-rose-800/80 text-white";
+}
+
+async function fetchJson<T>(url: string): Promise<T> {
+  const res = await fetch(url);
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { message?: string; error?: string };
+    throw new Error(body.message || body.error || `Request failed (${res.status})`);
+  }
+  return (await res.json()) as T;
+}
+
+export function MySquadLivePanel({ teamId, leagueId, refreshSignal = 0 }: Props) {
+  void leagueId;
+  const bustNextRef = useRef(false);
+  const [whatIfCaptainId, setWhatIfCaptainId] = useState<number | null>(null);
+
+  const q = useQuery({
+    queryKey: ["my-squad-live", teamId],
+    queryFn: () => {
+      const refresh = bustNextRef.current ? "&refresh=1" : "";
+      bustNextRef.current = false;
+      return fetchJson<MySquadLive>(`/api/my-squad-live?teamId=${teamId}${refresh}`);
+    },
+    refetchInterval: (query) => {
+      const data = (query.state.data ?? null) as MySquadLive | null;
+      const anyLive = data?.starters.some((p) => p.fixtureStatus === "live") ?? false;
+      return anyLive ? 60_000 : 5 * 60_000;
+    },
+    retry: 0,
+  });
+
+  useEffect(() => {
+    if (refreshSignal > 0) {
+      bustNextRef.current = true;
+      q.refetch();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshSignal]);
+
+  if (q.isLoading) return <Skeleton className="h-[40rem] w-full" />;
+  if (q.error) {
+    return (
+      <Alert variant="destructive">
+        <AlertTitle>Couldn&apos;t load live squad</AlertTitle>
+        <AlertDescription>{(q.error as Error).message}</AlertDescription>
+      </Alert>
+    );
+  }
+  const data = q.data!;
+  const gk = data.starters.filter((p) => p.elementType === 1);
+  const def = data.starters.filter((p) => p.elementType === 2);
+  const mid = data.starters.filter((p) => p.elementType === 3);
+  const fwd = data.starters.filter((p) => p.elementType === 4);
+  const captain = data.starters.find((p) => p.isCaptain) ?? null;
+
+  const onTileClick = (p: LivePlayer) => {
+    if (!p.isStarter) return;
+    if (p.isCaptain) {
+      setWhatIfCaptainId(null);
+      return;
+    }
+    setWhatIfCaptainId(whatIfCaptainId === p.playerId ? null : p.playerId);
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Radio className="h-4 w-4 text-primary" />
+          Live pitch · GW {data.gw}
+          <RefreshCcw className={cn("ml-1 h-3 w-3 text-muted-foreground", q.isFetching && "animate-spin")} />
+        </CardTitle>
+        <CardDescription>
+          Your squad with live points, captain ×{captain?.multiplier ?? 2}, fixture status, provisional bonus, and autosub preview. Tap any non-captain starter for a captain-swap what-if.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <MetricsHeader metrics={data.metrics} />
+
+        <div
+          className="relative overflow-hidden rounded-2xl border"
+          style={{ background: "linear-gradient(to bottom, hsl(120 55% 32%), hsl(120 50% 27%))" }}
+        >
+          <PitchLines />
+          <div className="relative flex flex-col gap-3 px-2 py-4 sm:gap-4 sm:py-5">
+            <Row players={gk} onClick={onTileClick} />
+            <Row players={def} onClick={onTileClick} />
+            <Row players={mid} onClick={onTileClick} />
+            <Row players={fwd} onClick={onTileClick} />
+          </div>
+        </div>
+
+        {whatIfCaptainId !== null && captain && (
+          <CaptainSwapPanel
+            current={captain}
+            candidate={data.starters.find((p) => p.playerId === whatIfCaptainId) ?? null}
+            onClose={() => setWhatIfCaptainId(null)}
+          />
+        )}
+
+        <BenchStrip bench={data.bench} onClick={onTileClick} />
+      </CardContent>
+    </Card>
+  );
+}
+
+function MetricsHeader({ metrics }: { metrics: LiveMetrics }) {
+  const traj = metrics.rankTrajectory;
+  const lastTwo = traj.slice(-2);
+  const rankDelta =
+    lastTwo.length === 2 ? lastTwo[1].overallRank - lastTwo[0].overallRank : 0;
+  return (
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <Stat
+        label="GW Net"
+        value={`${metrics.gwNetPoints >= 0 ? "" : ""}${metrics.gwNetPoints}`}
+        sub={metrics.transferCost > 0 ? `gross ${metrics.gwGrossPoints} (−${metrics.transferCost})` : undefined}
+      />
+      <Stat
+        label="Transfers"
+        value={`${metrics.transfersMade}${metrics.transferCost > 0 ? ` (−${metrics.transferCost})` : ""}`}
+        sub={`${metrics.freeTransfers} free`}
+      />
+      <Stat
+        label="Live Rank"
+        value={metrics.liveRank ? metrics.liveRank.toLocaleString() : "—"}
+        sub={
+          rankDelta !== 0 ? (
+            <span className={cn("inline-flex items-center gap-0.5", rankDelta < 0 ? "text-emerald-500" : "text-rose-500")}>
+              {rankDelta < 0 ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
+              {Math.abs(rankDelta).toLocaleString()}
+            </span>
+          ) : undefined
+        }
+      />
+      <Stat
+        label="GW Rank"
+        value={metrics.gwRank ? metrics.gwRank.toLocaleString() : "—"}
+        sub={traj.length > 1 ? <Sparkline points={traj.map((t) => t.overallRank)} /> : undefined}
+      />
+    </div>
+  );
+}
+
+function Stat({ label, value, sub }: { label: string; value: string; sub?: React.ReactNode }) {
+  return (
+    <div className="rounded-md border bg-card p-2.5">
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="mt-0.5 font-mono text-base font-semibold">{value}</div>
+      {sub && <div className="text-[10px] text-muted-foreground">{sub}</div>}
+    </div>
+  );
+}
+
+function Sparkline({ points }: { points: number[] }) {
+  const data = points.map((rank, i) => ({ idx: i, rank }));
+  return (
+    <div className="h-5 w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+          {/* Lower rank = better, so we invert the visual by negating. */}
+          <Line type="monotone" dataKey="rank" stroke="hsl(var(--primary))" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+          <ChartTooltip
+            contentStyle={{
+              background: "hsl(var(--popover))",
+              border: "1px solid hsl(var(--border))",
+              fontSize: 11,
+              padding: "2px 6px",
+            }}
+            formatter={(v: number) => v.toLocaleString()}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function PitchLines() {
+  return (
+    <div className="pointer-events-none absolute inset-0">
+      <div className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2 bg-white/15" />
+      <div className="absolute left-1/2 top-1/2 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/15" />
+      <div className="absolute left-1/2 top-0 h-12 w-32 -translate-x-1/2 rounded-b-2xl border border-t-0 border-white/15" />
+      <div className="absolute bottom-0 left-1/2 h-12 w-32 -translate-x-1/2 rounded-t-2xl border border-b-0 border-white/15" />
+    </div>
+  );
+}
+
+function Row({ players, onClick }: { players: LivePlayer[]; onClick: (p: LivePlayer) => void }) {
+  if (players.length === 0) return null;
+  return (
+    <div className="flex justify-around gap-1 sm:gap-2">
+      {players.map((p) => (
+        <Tile key={p.playerId} player={p} onClick={() => onClick(p)} />
+      ))}
+    </div>
+  );
+}
+
+function Tile({ player, onClick, small = false }: { player: LivePlayer; onClick: () => void; small?: boolean }) {
+  const isGk = player.elementType === 1;
+  const [imgFailed, setImgFailed] = useState(false);
+  const showLive = player.fixtureStatus === "live";
+  const showFinished = player.fixtureStatus === "finished";
+  const showUpcoming = player.fixtureStatus === "upcoming";
+  const totalPoints = player.pointsWithMultiplier;
+  const showProvisional = player.provisionalBonus > 0 && player.bonus === 0;
+  const showFinalBonus = player.bonus > 0;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={player.webName}
+      className={cn(
+        "relative flex flex-col items-center gap-0.5 transition-transform hover:scale-[1.03] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white",
+        small ? "w-[68px]" : "w-[72px] sm:w-[84px]",
+        player.autosubbedOut && "opacity-40",
+        player.autosubbedIn && "ring-2 ring-emerald-400",
+      )}
+    >
+      <div className="relative h-9 w-9 sm:h-11 sm:w-11">
+        {imgFailed || player.teamCode === 0 ? (
+          <div className="flex h-full w-full items-center justify-center rounded-md bg-white/85 text-[10px] font-bold text-slate-900" aria-hidden>
+            {player.teamShort}
+          </div>
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={kitUrl(player.teamCode, isGk)}
+            alt={`${player.teamShort} kit`}
+            loading="lazy"
+            onError={() => setImgFailed(true)}
+            className={cn("h-full w-full object-contain drop-shadow", player.autosubbedOut && "grayscale")}
+          />
+        )}
+        {player.isCaptain && (
+          <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-amber-400 text-[9px] font-bold text-amber-950 shadow">C</span>
+        )}
+        {!player.isCaptain && player.isVice && (
+          <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-slate-200 text-[9px] font-bold text-slate-900 shadow">V</span>
+        )}
+        {player.autosubbedIn && (
+          <span className="absolute -left-1 -top-1 flex items-center gap-0.5 rounded bg-emerald-500 px-1 py-0.5 text-[8px] font-bold text-white shadow">
+            <ArrowUpFromLine className="h-2.5 w-2.5" />
+            IN
+          </span>
+        )}
+      </div>
+      <div className="w-full overflow-hidden rounded-sm bg-white/95 px-1 py-0.5 text-center leading-tight shadow">
+        <div className={cn("truncate font-semibold text-slate-900", small ? "text-[10px]" : "text-[11px]")}>
+          {player.webName}
+          {player.autosubbedOut && <span className="ml-1 text-rose-600">✗</span>}
+        </div>
+        <div className={cn("font-mono font-semibold text-emerald-700", small ? "text-[11px]" : "text-[12px]")}>
+          {totalPoints} pts
+          {player.multiplier === 2 && <span className="ml-1 text-[9px] font-normal text-slate-500">×2</span>}
+          {player.multiplier === 3 && <span className="ml-1 text-[9px] font-normal text-amber-600">×3</span>}
+        </div>
+        {(showFinalBonus || showProvisional) && (
+          <div className={cn("inline-block rounded px-1 text-[9px] font-semibold", showFinalBonus ? "bg-amber-200 text-amber-900" : "bg-amber-100 text-amber-700")}>
+            {showProvisional ? "~" : ""}+{player.bonus > 0 ? player.bonus : player.provisionalBonus} bps
+          </div>
+        )}
+      </div>
+      <div
+        className={cn(
+          "w-full truncate rounded px-1 py-0.5 text-center text-[9px] font-medium",
+          showLive && "bg-emerald-500/90 text-white",
+          showFinished && "bg-slate-600/70 text-white",
+          showUpcoming && fdrTone(player.fixtureFdr),
+        )}
+      >
+        {showLive && (
+          <span className="inline-flex items-center gap-1">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
+            LIVE · {player.fixtureOpponent}
+          </span>
+        )}
+        {showFinished && <>FT · {player.fixtureOpponent}</>}
+        {showUpcoming && (
+          <>
+            {formatKickoff(player.fixtureKickoffIso)} · {player.fixtureOpponent}
+          </>
+        )}
+      </div>
+    </button>
+  );
+}
+
+function BenchStrip({ bench, onClick }: { bench: LivePlayer[]; onClick: (p: LivePlayer) => void }) {
+  if (!bench || bench.length === 0) return null;
+  return (
+    <div className="overflow-hidden rounded-2xl border bg-muted/40 px-2 py-3">
+      <div className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        Bench (autosub order)
+      </div>
+      <div className="flex justify-around gap-1 sm:gap-2">
+        {bench.map((p, i) => (
+          <div key={p.playerId} className="flex flex-col items-center gap-1">
+            <div className="text-[9px] font-semibold uppercase text-muted-foreground">
+              {p.elementType === 1 ? "GKP" : `${i + 1}.${p.position}`}
+            </div>
+            <Tile player={p} onClick={() => onClick(p)} small />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CaptainSwapPanel({
+  current,
+  candidate,
+  onClose,
+}: {
+  current: LivePlayer;
+  candidate: LivePlayer | null;
+  onClose: () => void;
+}) {
+  if (!candidate) return null;
+  // Current captain contributes `livePoints × multiplier`. If we'd captained
+  // `candidate` instead, the candidate's contribution would be `livePoints × 2`
+  // and the (former) captain reverts to `livePoints × 1`.
+  const currentTotal = current.livePoints * (current.multiplier || 2) + candidate.livePoints * 1;
+  const newTotal = candidate.livePoints * 2 + current.livePoints * 1;
+  const delta = newTotal - currentTotal;
+  return (
+    <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3">
+      <div className="flex items-center justify-between gap-2 text-sm">
+        <div className="flex items-center gap-2">
+          <Crown className="h-4 w-4 text-amber-500" />
+          <span className="font-semibold">Captain-swap what-if</span>
+        </div>
+        <button type="button" onClick={onClose} className="text-xs text-muted-foreground hover:text-foreground">
+          close
+        </button>
+      </div>
+      <div className="mt-1.5 grid grid-cols-3 gap-2 text-xs">
+        <div className="rounded bg-card p-2">
+          <div className="text-[10px] uppercase text-muted-foreground">Current C: {current.webName}</div>
+          <div className="font-mono text-sm font-semibold">
+            {current.livePoints} × {current.multiplier || 2} = {current.livePoints * (current.multiplier || 2)} pts
+          </div>
+        </div>
+        <div className="rounded bg-card p-2">
+          <div className="text-[10px] uppercase text-muted-foreground">If C: {candidate.webName}</div>
+          <div className="font-mono text-sm font-semibold">
+            {candidate.livePoints} × 2 = {candidate.livePoints * 2} pts
+          </div>
+        </div>
+        <div className={cn("rounded p-2", delta > 0 ? "bg-emerald-500/15" : delta < 0 ? "bg-rose-500/15" : "bg-muted")}>
+          <div className="text-[10px] uppercase text-muted-foreground">Delta</div>
+          <div className={cn("flex items-center gap-1 font-mono text-sm font-semibold", delta > 0 ? "text-emerald-600 dark:text-emerald-400" : delta < 0 ? "text-rose-600 dark:text-rose-400" : "")}>
+            <Award className="h-3.5 w-3.5" />
+            {delta >= 0 ? "+" : ""}
+            {delta}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
