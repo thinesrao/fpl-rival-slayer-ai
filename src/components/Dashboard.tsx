@@ -20,6 +20,7 @@ import { WhatIfModal } from "@/components/WhatIfModal";
 import { RivalChipsPanel } from "@/components/RivalChipsPanel";
 import { LeagueHeatmap } from "@/components/LeagueHeatmap";
 import { MatchesPanel } from "@/components/MatchesPanel";
+import { MySquadLivePanel } from "@/components/MySquadLivePanel";
 import { IntelPanel } from "@/components/IntelPanel";
 import { RetrospectivePanel } from "@/components/RetrospectivePanel";
 import { LivePanel } from "@/components/LivePanel";
@@ -300,6 +301,7 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
           <TabsTrigger value="projections">Projections</TabsTrigger>
           <TabsTrigger value="plan">Plan</TabsTrigger>
           <TabsTrigger value="ai">AI Coach</TabsTrigger>
+          <TabsTrigger value="pitch">Pitch</TabsTrigger>
           <TabsTrigger value="live">Live</TabsTrigger>
           <TabsTrigger value="matches">Matches</TabsTrigger>
           <TabsTrigger value="retrospective">Retrospective</TabsTrigger>
@@ -356,6 +358,10 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
             </Card>
           )}
           <RivalChipsPanel teamId={teamId} leagueId={leagueId} />
+        </TabsContent>
+
+        <TabsContent value="pitch" className="mt-4">
+          <MySquadLivePanel teamId={teamId} leagueId={leagueId} refreshSignal={refreshSignal} />
         </TabsContent>
 
         <TabsContent value="live" className="mt-4">
