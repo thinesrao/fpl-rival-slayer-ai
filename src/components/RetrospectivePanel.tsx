@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -77,14 +78,24 @@ interface RetrospectiveResponse {
   luck?: LuckSummary;
   captainRoi?: CaptainRoi;
   snapshotTakenAt: string;
+  /** Finished GWs that have a snapshot — populated by the server so the UI
+   *  can offer a selector when multiple are available. */
+  availableGws?: number[];
+  /** Set when the server fell back to a different GW than the user asked for. */
+  requestedGw?: number;
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { message?: string; error?: string };
+    const body = (await res.json().catch(() => ({}))) as {
+      message?: string;
+      error?: string;
+      availableGws?: number[];
+    };
     const err = new Error(body.message || body.error || `Request failed (${res.status})`);
-    (err as Error & { status?: number }).status = res.status;
+    (err as Error & { status?: number; payload?: unknown }).status = res.status;
+    (err as Error & { status?: number; payload?: unknown }).payload = body;
     throw err;
   }
   return (await res.json()) as T;
@@ -96,15 +107,21 @@ interface Props {
 }
 
 export function RetrospectivePanel({ teamId, leagueId }: Props) {
+  const [selectedGw, setSelectedGw] = useState<number | undefined>(undefined);
   const q = useQuery({
-    queryKey: ["retrospective", teamId, leagueId],
-    queryFn: () => fetchJson<RetrospectiveResponse>(`/api/retrospective?teamId=${teamId}&leagueId=${leagueId}`),
+    queryKey: ["retrospective", teamId, leagueId, selectedGw],
+    queryFn: () =>
+      fetchJson<RetrospectiveResponse>(
+        `/api/retrospective?teamId=${teamId}&leagueId=${leagueId}${selectedGw ? `&gw=${selectedGw}` : ""}`,
+      ),
     retry: 0,
   });
 
   if (q.isLoading) return <Skeleton className="h-64 w-full" />;
   if (q.error) {
-    const status = (q.error as Error & { status?: number }).status;
+    const err = q.error as Error & { status?: number; payload?: { availableGws?: number[] } };
+    const status = err.status;
+    const available = err.payload?.availableGws ?? [];
     return (
       <Alert variant={status === 404 ? "default" : "destructive"}>
         <History className="h-4 w-4" />
@@ -112,11 +129,26 @@ export function RetrospectivePanel({ teamId, leagueId }: Props) {
           {status === 404 ? "Retrospective not available yet" : "Couldn’t load retrospective"}
         </AlertTitle>
         <AlertDescription>
-          {(q.error as Error).message}
-          {status === 404 && (
+          {err.message}
+          {status === 404 && available.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">Look at:</span>
+              {available.map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() => setSelectedGw(g)}
+                  className="rounded-full border bg-card px-2.5 py-0.5 text-xs font-medium hover:bg-muted"
+                >
+                  GW {g}
+                </button>
+              ))}
+            </div>
+          )}
+          {status === 404 && available.length === 0 && (
             <span className="mt-2 block text-xs">
-              Snapshots are taken when you run the AI Coach. Once the next GW finishes, this tab will light up
-              automatically.
+              Snapshots are taken when you run the AI Coach (Plan tab → Suggested). Once the next GW finishes,
+              this tab will light up automatically.
             </span>
           )}
         </AlertDescription>
@@ -131,11 +163,30 @@ export function RetrospectivePanel({ teamId, leagueId }: Props) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-        <span className="flex items-center gap-2">
+        <span className="flex flex-wrap items-center gap-2">
           <History className="h-3.5 w-3.5" />
           Looking back at GW {data.gw}. Snapshot taken {new Date(data.snapshotTakenAt).toLocaleString()}.
+          {data.requestedGw && data.requestedGw !== data.gw && (
+            <Badge variant="outline" className="text-[10px]">
+              GW {data.requestedGw} had no snapshot — showing GW {data.gw}
+            </Badge>
+          )}
         </span>
-        <ShareRecapButton teamId={teamId} gw={data.gw} teamName={user.name} />
+        <div className="flex flex-wrap items-center gap-2">
+          {data.availableGws && data.availableGws.length > 1 && (
+            <select
+              value={data.gw}
+              onChange={(e) => setSelectedGw(Number(e.target.value))}
+              className="rounded-md border bg-background px-2 py-1 text-xs font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              aria-label="Select gameweek"
+            >
+              {data.availableGws.map((g) => (
+                <option key={g} value={g}>GW {g}</option>
+              ))}
+            </select>
+          )}
+          <ShareRecapButton teamId={teamId} gw={data.gw} teamName={user.name} />
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">

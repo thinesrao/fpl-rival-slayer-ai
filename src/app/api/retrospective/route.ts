@@ -30,20 +30,52 @@ export async function GET(req: NextRequest) {
   try {
     const bs = await getBootstrap();
     const prev = previousFinishedEvent(bs);
-    const targetGw = parsed.data.gw ?? prev?.id;
-    if (!targetGw) {
+    const requestedGw = parsed.data.gw ?? prev?.id;
+    if (!requestedGw) {
       return NextResponse.json(
         { error: "no_finished_gw", message: "No finished gameweek to retrospect yet." },
         { status: 404 },
       );
     }
 
-    const snapshot = await readSnapshot(parsed.data.teamId, parsed.data.leagueId, targetGw);
+    // Walk back through all finished GWs (newest first) and collect any that
+    // have a snapshot. Lets us (a) pick a sensible default when the
+    // most-recent finished GW has no snapshot, and (b) tell the client which
+    // GWs they CAN look at.
+    const finishedDesc = [...bs.events].filter((e) => e.finished).reverse();
+    const snapResults = await Promise.all(
+      finishedDesc.map(async (e) => ({
+        gw: e.id,
+        snap: await readSnapshot(parsed.data.teamId, parsed.data.leagueId, e.id),
+      })),
+    );
+    const availableGws = snapResults.filter((r) => r.snap).map((r) => r.gw);
+
+    if (availableGws.length === 0) {
+      return NextResponse.json(
+        {
+          error: "no_snapshot",
+          message: `No pre-GW snapshots stored for this team yet. Run the AI analysis before a deadline to start building them.`,
+          availableGws,
+        },
+        { status: 404 },
+      );
+    }
+
+    // Prefer the requested GW; otherwise fall back to the most-recent
+    // finished GW that has a snapshot.
+    const requestedHit = snapResults.find((r) => r.gw === requestedGw);
+    const fallback = snapResults.find((r) => r.snap);
+    const snapshot = requestedHit?.snap ?? fallback?.snap;
+    const targetGw = requestedHit?.snap ? requestedGw : (fallback?.gw as number);
+
     if (!snapshot) {
       return NextResponse.json(
         {
           error: "no_snapshot",
-          message: `No pre-GW snapshot stored for GW${targetGw}. Run the AI analysis before deadline to build one for next week.`,
+          message: `No pre-GW snapshot stored for GW${requestedGw}. Available: ${availableGws.join(", ")}.`,
+          availableGws,
+          requestedGw,
         },
         { status: 404 },
       );
@@ -69,7 +101,12 @@ export async function GET(req: NextRequest) {
     const cleanRivalPicks = rivalPicks.filter((r): r is { entryId: number; picks: typeof userPicks } => r !== null);
 
     const result = buildRetrospective(payload, userPicks, cleanRivalPicks, live, bs);
-    return NextResponse.json({ ...result, snapshotTakenAt: snapshot.takenAt });
+    return NextResponse.json({
+      ...result,
+      snapshotTakenAt: snapshot.takenAt,
+      availableGws,
+      requestedGw: requestedHit?.snap ? undefined : requestedGw,
+    });
   } catch (err) {
     if (err instanceof FplError) {
       return NextResponse.json({ error: "fpl_error", status: err.status, message: err.message }, {
