@@ -295,7 +295,12 @@ function Tile({ player, onClick, small = false }: { player: LivePlayer; onClick:
   const showLive = player.fixtureStatus === "live";
   const showFinished = player.fixtureStatus === "finished";
   const showUpcoming = player.fixtureStatus === "upcoming";
-  const totalPoints = player.pointsWithMultiplier;
+  // Bench players (not autosubbed in) have multiplier 0, so
+  // pointsWithMultiplier is always 0. Show their raw livePoints instead
+  // so users can see what the bench scored — toned down to make it
+  // visually obvious those points aren't actually counting.
+  const isInactiveBench = !player.isStarter && !player.autosubbedIn;
+  const totalPoints = isInactiveBench ? player.livePoints : player.pointsWithMultiplier;
   const showProvisional = player.provisionalBonus > 0 && player.bonus === 0;
   const showFinalBonus = player.bonus > 0;
   return (
@@ -343,7 +348,14 @@ function Tile({ player, onClick, small = false }: { player: LivePlayer; onClick:
           {player.webName}
           {player.autosubbedOut && <span className="ml-1 text-rose-600">✗</span>}
         </div>
-        <div className={cn("font-mono font-semibold text-emerald-700", small ? "text-[11px]" : "text-[12px]")}>
+        <div
+          className={cn(
+            "font-mono font-semibold",
+            isInactiveBench ? "text-slate-500" : "text-emerald-700",
+            small ? "text-[11px]" : "text-[12px]",
+          )}
+          title={isInactiveBench ? "Bench points (not counting)" : undefined}
+        >
           <AnimatedNumber value={totalPoints} duration={0.5} suffix=" pts" />
           {player.multiplier === 2 && <span className="ml-1 text-[9px] font-normal text-slate-500">×2</span>}
           {player.multiplier === 3 && <span className="ml-1 text-[9px] font-normal text-amber-600">×3</span>}
@@ -381,10 +393,20 @@ function Tile({ player, onClick, small = false }: { player: LivePlayer; onClick:
 
 function BenchStrip({ bench, onClick }: { bench: LivePlayer[]; onClick: (p: LivePlayer) => void }) {
   if (!bench || bench.length === 0) return null;
+  // Sum of points scored by bench players who didn't autosub in — the
+  // "bench fail" total for this GW.
+  const inactiveBenchTotal = bench
+    .filter((p) => !p.autosubbedIn)
+    .reduce((s, p) => s + p.livePoints, 0);
   return (
     <div className="overflow-hidden rounded-2xl border bg-muted/40 px-2 py-3">
-      <div className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-        Bench (autosub order)
+      <div className="mb-2 flex items-center justify-between px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <span>Bench (autosub order)</span>
+        {inactiveBenchTotal > 0 && (
+          <span title="Points scored by your bench that didn't count (no autosub).">
+            on bench: <span className="font-mono text-slate-500">{inactiveBenchTotal}</span> pts
+          </span>
+        )}
       </div>
       <div className="flex w-full justify-around gap-0.5 sm:gap-1.5">
         {bench.map((p, i) => (
