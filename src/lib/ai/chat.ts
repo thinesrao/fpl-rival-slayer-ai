@@ -56,6 +56,111 @@ function extractGrounding(meta: GroundingMetadata | undefined) {
   return { queries, chunks };
 }
 
+export interface ChatStreamEvent {
+  /** New token(s) of text. Empty if `done` is true. */
+  delta?: string;
+  /** Final event of the stream — carries grounding metadata and model id. */
+  done?: boolean;
+  citations?: Array<{ uri: string; title: string }>;
+  searchQueries?: string[];
+  model?: string;
+}
+
+/** Streaming variant of `askChat`. Yields incremental text deltas and a
+ *  terminal `done` event with grounding metadata. The caller is responsible
+ *  for persisting the full reply once the stream completes. */
+export async function* askChatStream(
+  history: ChatMessage[],
+  userMessage: string,
+  context: ChatContext,
+): AsyncGenerator<ChatStreamEvent, void, unknown> {
+  const ai = client();
+  const model = env.GEMINI_MODEL;
+  const seasonLabel = computeSeasonLabel(context.deadline);
+  const systemInstruction = buildChatSystemInstruction({
+    seasonLabel,
+    gw: context.gw,
+    deadline: context.deadline,
+  });
+  const contextBlock = buildChatContextBlock(context);
+  const contents: Array<{ role: "user" | "model"; parts: Array<{ text: string }> }> = [
+    { role: "user", parts: [{ text: contextBlock }] },
+    {
+      role: "model",
+      parts: [
+        {
+          text: "Understood. I have your squad, your rivals, the upcoming fixtures, and the projection model loaded. Ask me anything.",
+        },
+      ],
+    },
+    ...history.map((m) => ({ role: m.role, parts: [{ text: m.text }] })),
+    { role: "user" as const, parts: [{ text: userMessage }] },
+  ];
+
+  let aggregated = "";
+  let lastMeta: GroundingMetadata | undefined;
+
+  const stream = await ai.models.generateContentStream({
+    model,
+    contents,
+    config: {
+      systemInstruction,
+      temperature: 0.4,
+      tools: [{ googleSearch: {} }],
+      thinkingConfig: { thinkingBudget: 1024 },
+      maxOutputTokens: 4096,
+    },
+  });
+
+  for await (const chunk of stream) {
+    const candidate = chunk.candidates?.[0];
+    const partsText = (candidate?.content?.parts ?? [])
+      .map((p) => ("text" in p && typeof p.text === "string" ? p.text : ""))
+      .join("");
+    const delta = chunk.text || partsText || "";
+    if (delta) {
+      aggregated += delta;
+      yield { delta };
+    }
+    if (candidate?.groundingMetadata) {
+      lastMeta = candidate.groundingMetadata;
+    }
+  }
+
+  // If grounded streaming returned no text at all, retry once without
+  // googleSearch (matches the fallback shape in askChat()).
+  if (!aggregated) {
+    const fallback = await ai.models.generateContentStream({
+      model,
+      contents,
+      config: {
+        systemInstruction,
+        temperature: 0.4,
+        thinkingConfig: { thinkingBudget: 512 },
+        maxOutputTokens: 4096,
+      },
+    });
+    for await (const chunk of fallback) {
+      const candidate = chunk.candidates?.[0];
+      const partsText = (candidate?.content?.parts ?? [])
+        .map((p) => ("text" in p && typeof p.text === "string" ? p.text : ""))
+        .join("");
+      const delta = chunk.text || partsText || "";
+      if (delta) {
+        aggregated += delta;
+        yield { delta };
+      }
+      if (candidate?.groundingMetadata) lastMeta = candidate.groundingMetadata;
+    }
+    if (!aggregated) {
+      throw new Error("Gemini stream returned no text.");
+    }
+  }
+
+  const g = extractGrounding(lastMeta);
+  yield { done: true, citations: g.chunks, searchQueries: g.queries, model };
+}
+
 export async function askChat(
   history: ChatMessage[],
   userMessage: string,

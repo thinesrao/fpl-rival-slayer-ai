@@ -16,7 +16,7 @@ import { buildRivalContext } from "@/lib/fpl/rivals";
 import { buildProjections } from "@/lib/projections";
 import { computeFreeTransfers } from "@/lib/fpl/free-transfers";
 import { computeEffectiveOwnership } from "@/lib/intel/effective-ownership";
-import { askChat } from "@/lib/ai/chat";
+import { askChatStream } from "@/lib/ai/chat";
 import { appendMessages, clearThread, readThread, type ChatMessage } from "@/lib/store/chat";
 
 export const runtime = "nodejs";
@@ -68,53 +68,12 @@ export async function POST(req: NextRequest) {
   }
   const { teamId, leagueId, message } = parsed.data;
 
+  let context, bs, targetGw;
   try {
-    const { context, bs, targetGw } = await buildRivalContext(leagueId, teamId, 3);
-    const target = bs.events.find((e) => e.id === targetGw) ?? currentEvent(bs);
-
-    const [projections, fixtures, entry, entryHistory] = await Promise.all([
-      buildProjections(context, bs, targetGw),
-      getFixtures(targetGw),
-      getEntry(teamId).catch(() => null),
-      getEntryHistory(teamId).catch(() => null),
-    ]);
-
-    const bank = entry?.last_deadline_bank ?? 0;
-    const freeTransfers = entryHistory ? computeFreeTransfers(entryHistory).freeTransfers : 1;
-    const eo = computeEffectiveOwnership(context, bs);
-
-    const thread = await readThread(teamId, leagueId);
-
-    const reply = await askChat(thread.messages, message, {
-      gw: targetGw,
-      deadline: target.deadline_time,
-      ctx: context,
-      userProjection: projections.user,
-      rivalProjections: projections.rivals,
-      overtake: projections.overtake,
-      fixtures,
-      bs,
-      bank,
-      freeTransfers,
-      eo,
-    });
-
-    const now = new Date().toISOString();
-    const userMsg: ChatMessage = { role: "user", text: message, ts: now };
-    const modelMsg: ChatMessage = {
-      role: "model",
-      text: reply.reply,
-      ts: new Date().toISOString(),
-      citations: reply.citations.length ? reply.citations : undefined,
-    };
-    const updated = await appendMessages(teamId, leagueId, [userMsg, modelMsg]);
-
-    return NextResponse.json({
-      reply: modelMsg,
-      thread: updated,
-      searchQueries: reply.searchQueries,
-      model: reply.model,
-    });
+    const built = await buildRivalContext(leagueId, teamId, 3);
+    context = built.context;
+    bs = built.bs;
+    targetGw = built.targetGw;
   } catch (err) {
     if (err instanceof FplError) {
       return NextResponse.json(
@@ -122,7 +81,91 @@ export async function POST(req: NextRequest) {
         { status: err.status === 404 ? 404 : 502 },
       );
     }
-    const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: "internal_error", message }, { status: 500 });
+    const msg = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: "internal_error", message: msg }, { status: 500 });
   }
+
+  const target = bs.events.find((e) => e.id === targetGw) ?? currentEvent(bs);
+  const [projections, fixtures, entry, entryHistory] = await Promise.all([
+    buildProjections(context, bs, targetGw),
+    getFixtures(targetGw),
+    getEntry(teamId).catch(() => null),
+    getEntryHistory(teamId).catch(() => null),
+  ]);
+  const bank = entry?.last_deadline_bank ?? 0;
+  const freeTransfers = entryHistory ? computeFreeTransfers(entryHistory).freeTransfers : 1;
+  const eo = computeEffectiveOwnership(context, bs);
+  const thread = await readThread(teamId, leagueId);
+
+  const encoder = new TextEncoder();
+  const enqueue = (controller: ReadableStreamDefaultController, event: object) => {
+    controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+  };
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      let aggregated = "";
+      let citations: Array<{ uri: string; title: string }> = [];
+      let searchQueries: string[] = [];
+      let model = "";
+      try {
+        for await (const evt of askChatStream(thread.messages, message, {
+          gw: targetGw,
+          deadline: target.deadline_time,
+          ctx: context,
+          userProjection: projections.user,
+          rivalProjections: projections.rivals,
+          overtake: projections.overtake,
+          fixtures,
+          bs,
+          bank,
+          freeTransfers,
+          eo,
+        })) {
+          if (evt.delta) {
+            aggregated += evt.delta;
+            enqueue(controller, { type: "delta", text: evt.delta });
+          }
+          if (evt.done) {
+            citations = evt.citations ?? [];
+            searchQueries = evt.searchQueries ?? [];
+            model = evt.model ?? "";
+          }
+        }
+
+        const now = new Date().toISOString();
+        const userMsg: ChatMessage = { role: "user", text: message, ts: now };
+        const modelMsg: ChatMessage = {
+          role: "model",
+          text: aggregated,
+          ts: new Date().toISOString(),
+          citations: citations.length ? citations : undefined,
+        };
+        const updated = await appendMessages(teamId, leagueId, [userMsg, modelMsg]);
+
+        enqueue(controller, {
+          type: "done",
+          reply: modelMsg,
+          thread: updated,
+          citations,
+          searchQueries,
+          model,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        enqueue(controller, { type: "error", message: msg });
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    },
+  });
 }
