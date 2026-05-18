@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { ManagerSquad, PlayerProjection, Position, SquadProjection, SquadSlot } from "@/lib/types";
 import type { PlayerEo } from "@/lib/intel/effective-ownership";
 import { Badge } from "@/components/ui/badge";
+import { PlayerPhoto } from "@/components/PlayerPhoto";
 import { cn } from "@/lib/utils";
 
 const POSITIONS: Position[] = ["GKP", "DEF", "MID", "FWD"];
@@ -92,35 +93,44 @@ function PlayerSide({
           }
         : {})}
       className={cn(
-        "flex min-h-[52px] w-full flex-col gap-0.5 p-2 text-left",
+        "flex min-h-[52px] w-full items-center gap-2 p-2 text-left",
         benched && "opacity-60",
         bg,
         onClick && "cursor-pointer hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
       )}
     >
-      <div className="flex flex-wrap items-center gap-1">
-        <span className="truncate text-sm font-medium leading-tight">{slot.player.web_name}</span>
-        {slot.pick.is_captain && (
-          <Badge variant="success" className="px-1 py-0 text-[10px] leading-none">C</Badge>
-        )}
-        {slot.pick.is_vice_captain && (
-          <Badge variant="secondary" className="px-1 py-0 text-[10px] leading-none">V</Badge>
-        )}
-      </div>
-      <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-        <span>{slot.team.short_name}</span>
-        {proj && <span className="font-mono">xP {proj.xPoints.toFixed(1)}</span>}
-        {eoTone && (
-          <Badge variant={eoTone} className="px-1 py-0 text-[9px] leading-none">
-            EO {eo!.eoPct.toFixed(0)}%
-          </Badge>
-        )}
-        {benched && <span className="text-[10px] uppercase">bench</span>}
-        {proj && proj.injuryRisk >= 0.4 && (
-          <Badge variant="destructive" className="px-1 py-0 text-[9px] leading-none">
-            {Math.round(proj.injuryRisk * 100)}% inj
-          </Badge>
-        )}
+      <PlayerPhoto
+        code={slot.player.code}
+        name={slot.player.web_name}
+        difficulty={proj?.fixtureDifficulty}
+        chanceOfPlaying={slot.player.chance_of_playing_next_round}
+        size="sm"
+      />
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="truncate text-sm font-medium leading-tight">{slot.player.web_name}</span>
+          {slot.pick.is_captain && (
+            <Badge variant="success" className="px-1 py-0 text-[10px] leading-none">C</Badge>
+          )}
+          {slot.pick.is_vice_captain && (
+            <Badge variant="secondary" className="px-1 py-0 text-[10px] leading-none">V</Badge>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span>{slot.team.short_name}</span>
+          {proj && <span className="font-mono">xP {proj.xPoints.toFixed(1)}</span>}
+          {eoTone && (
+            <Badge variant={eoTone} className="px-1 py-0 text-[9px] leading-none">
+              EO {eo!.eoPct.toFixed(0)}%
+            </Badge>
+          )}
+          {benched && <span className="text-[10px] uppercase">bench</span>}
+          {proj && proj.injuryRisk >= 0.4 && (
+            <Badge variant="destructive" className="px-1 py-0 text-[9px] leading-none">
+              {Math.round(proj.injuryRisk * 100)}% inj
+            </Badge>
+          )}
+        </div>
       </div>
     </Tag>
   );
