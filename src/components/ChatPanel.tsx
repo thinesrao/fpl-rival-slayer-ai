@@ -96,25 +96,16 @@ function renderInline(text: string): React.ReactNode {
 
 export function ChatPanel({ teamId, leagueId }: Props) {
   const [input, setInput] = useState("");
+  const [streamingText, setStreamingText] = useState("");
+  const [streaming, setStreaming] = useState(false);
+  const [streamError, setStreamError] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const threadQuery = useQuery({
     queryKey: ["chat", teamId, leagueId],
     queryFn: () => fetchJson<{ thread: ChatThread }>(`/api/chat?teamId=${teamId}&leagueId=${leagueId}`),
-  });
-
-  const sendMutation = useMutation({
-    mutationFn: async (message: string) =>
-      fetchJson<{ reply: ChatMessage; thread: ChatThread }>(`/api/chat`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ teamId, leagueId, message }),
-      }),
-    onSuccess: (data) => {
-      queryClient.setQueryData(["chat", teamId, leagueId], { thread: data.thread });
-    },
-    onError: (err: Error) => toast.error(err.message),
   });
 
   const clearMutation = useMutation({
@@ -129,23 +120,91 @@ export function ChatPanel({ teamId, leagueId }: Props) {
 
   const messages = threadQuery.data?.thread.messages ?? [];
 
-  // Auto-scroll to bottom on new message.
+  // Auto-scroll to bottom on new message or while streaming.
   useEffect(() => {
     const el = scrollerRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages.length, sendMutation.isPending]);
+  }, [messages.length, streaming, streamingText]);
 
-  const submit = (text: string) => {
+  // Cancel any in-flight stream on unmount.
+  useEffect(() => {
+    return () => abortRef.current?.abort();
+  }, []);
+
+  const submit = async (text: string) => {
     const trimmed = text.trim();
-    if (!trimmed || sendMutation.isPending) return;
+    if (!trimmed || streaming) return;
     setInput("");
-    // Optimistic append.
+    setStreamError(null);
+    setStreamingText("");
+    setStreaming(true);
+
+    // Optimistic append of the user message.
     const optimistic: ChatThread = {
       messages: [...messages, { role: "user", text: trimmed, ts: new Date().toISOString() }],
       updatedAt: new Date().toISOString(),
     };
     queryClient.setQueryData(["chat", teamId, leagueId], { thread: optimistic });
-    sendMutation.mutate(trimmed);
+
+    const ac = new AbortController();
+    abortRef.current = ac;
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ teamId, leagueId, message: trimmed }),
+        signal: ac.signal,
+      });
+      if (!res.ok || !res.body) {
+        const body = (await res.json().catch(() => ({}))) as { message?: string; error?: string };
+        throw new Error(body.message || body.error || `Request failed (${res.status})`);
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let aggregated = "";
+      // SSE parse: events are `data: <json>\n\n` delimited.
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split("\n\n");
+        buffer = events.pop() ?? "";
+        for (const raw of events) {
+          const line = raw.trim();
+          if (!line.startsWith("data:")) continue;
+          const payload = line.slice(5).trim();
+          if (!payload) continue;
+          let evt: { type: string; text?: string; reply?: ChatMessage; thread?: ChatThread; message?: string };
+          try {
+            evt = JSON.parse(payload);
+          } catch {
+            continue;
+          }
+          if (evt.type === "delta" && typeof evt.text === "string") {
+            aggregated += evt.text;
+            setStreamingText(aggregated);
+          } else if (evt.type === "done" && evt.thread) {
+            queryClient.setQueryData(["chat", teamId, leagueId], { thread: evt.thread });
+            setStreamingText("");
+          } else if (evt.type === "error") {
+            throw new Error(evt.message || "Stream errored");
+          }
+        }
+      }
+    } catch (err) {
+      if ((err as Error).name === "AbortError") {
+        // Quiet — caller aborted.
+      } else {
+        const msg = (err as Error).message;
+        setStreamError(msg);
+        toast.error(msg);
+      }
+    } finally {
+      setStreaming(false);
+      abortRef.current = null;
+    }
   };
 
   return (
@@ -178,12 +237,17 @@ export function ChatPanel({ teamId, leagueId }: Props) {
         >
           {threadQuery.isLoading ? (
             <Skeleton className="h-24 w-full" />
-          ) : messages.length === 0 ? (
+          ) : messages.length === 0 && !streaming ? (
             <EmptyState onPick={submit} />
           ) : (
             messages.map((m, i) => <Bubble key={`${m.ts}-${i}`} msg={m} />)
           )}
-          {sendMutation.isPending && (
+          {streaming && streamingText && (
+            <Bubble
+              msg={{ role: "model", text: streamingText + "▍", ts: "streaming" }}
+            />
+          )}
+          {streaming && !streamingText && (
             <div className="flex items-center gap-2 rounded-md bg-card/80 p-3 text-xs text-muted-foreground">
               <Bot className="h-3.5 w-3.5 animate-pulse text-primary" />
               Thinking…
@@ -191,10 +255,10 @@ export function ChatPanel({ teamId, leagueId }: Props) {
           )}
         </div>
 
-        {sendMutation.error && (
+        {streamError && (
           <Alert variant="destructive">
             <AlertTitle>Chat failed</AlertTitle>
-            <AlertDescription>{(sendMutation.error as Error).message}</AlertDescription>
+            <AlertDescription>{streamError}</AlertDescription>
           </Alert>
         )}
 
@@ -216,14 +280,14 @@ export function ChatPanel({ teamId, leagueId }: Props) {
             }}
             placeholder="Ask the co-pilot anything about this team…"
             rows={2}
-            disabled={sendMutation.isPending}
+            disabled={streaming}
             className={cn(
               "flex-1 resize-none rounded-md border bg-background px-3 py-2 text-sm shadow-sm",
               "placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
               "disabled:cursor-not-allowed disabled:opacity-50",
             )}
           />
-          <Button type="submit" size="sm" disabled={!input.trim() || sendMutation.isPending}>
+          <Button type="submit" size="sm" disabled={!input.trim() || streaming}>
             <Send className="h-4 w-4" />
             <span className="ml-1.5 hidden sm:inline">Send</span>
           </Button>
