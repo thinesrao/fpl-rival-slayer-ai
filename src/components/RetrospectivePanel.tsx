@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ShareRecapButton } from "@/components/ShareRecapButton";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -129,9 +130,12 @@ export function RetrospectivePanel({ teamId, leagueId }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-        <History className="h-3.5 w-3.5" />
-        <span>Looking back at GW {data.gw}. Snapshot taken {new Date(data.snapshotTakenAt).toLocaleString()}.</span>
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+        <span className="flex items-center gap-2">
+          <History className="h-3.5 w-3.5" />
+          Looking back at GW {data.gw}. Snapshot taken {new Date(data.snapshotTakenAt).toLocaleString()}.
+        </span>
+        <ShareRecapButton teamId={teamId} gw={data.gw} teamName={user.name} />
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
