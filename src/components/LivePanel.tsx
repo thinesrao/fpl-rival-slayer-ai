@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Activity, Crown, Radio } from "lucide-react";
+import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { cn } from "@/lib/utils";
 
 interface ManagerLive {
@@ -166,7 +167,9 @@ export function LivePanel({ teamId, leagueId, refreshSignal = 0 }: Props) {
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-xl font-bold tabular-nums">{m.liveScore}</div>
+                    <div className="text-xl font-bold tabular-nums">
+                      <AnimatedNumber value={m.liveScore} duration={0.6} />
+                    </div>
                     <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
                       {m.played} played · {m.playing} live · {m.toPlay} to play
                     </div>
