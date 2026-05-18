@@ -24,6 +24,7 @@ export interface FplTeam {
 
 export interface FplElement {
   id: number;
+  code: number; // numeric code used in player photo URLs (separate from `id`)
   web_name: string;
   first_name: string;
   second_name: string;
