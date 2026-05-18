@@ -1,20 +1,17 @@
 "use client";
 
-import { Calendar, LayoutGrid, LayoutList, Radio, Swords } from "lucide-react";
+import { Calendar, History, LayoutGrid, Radio, Swords } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type TabId =
-  | "rivals"
-  | "differentials"
-  | "projections"
-  | "plan"
-  | "suggested"
   | "pitch"
+  | "plan"
   | "matches"
-  | "retrospective";
+  | "rivals"
+  | "history";
 
 interface NavItem {
-  id: TabId | "__more";
+  id: TabId;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
 }
@@ -24,16 +21,15 @@ const PRIMARY: NavItem[] = [
   { id: "plan", label: "Plan", icon: Calendar },
   { id: "matches", label: "Matches", icon: Radio },
   { id: "rivals", label: "Rivals", icon: Swords },
-  { id: "__more", label: "More", icon: LayoutList },
+  { id: "history", label: "History", icon: History },
 ];
 
 interface Props {
   activeTab: TabId;
   onTabChange: (id: TabId) => void;
-  onOpenMore: () => void;
 }
 
-export function BottomNav({ activeTab, onTabChange, onOpenMore }: Props) {
+export function BottomNav({ activeTab, onTabChange }: Props) {
   return (
     <nav
       aria-label="Primary"
@@ -50,7 +46,7 @@ export function BottomNav({ activeTab, onTabChange, onOpenMore }: Props) {
             <button
               key={item.id}
               type="button"
-              onClick={() => (item.id === "__more" ? onOpenMore() : onTabChange(item.id as TabId))}
+              onClick={() => onTabChange(item.id)}
               className={cn(
                 "relative flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-colors",
                 isActive ? "text-primary" : "text-muted-foreground hover:text-foreground",
