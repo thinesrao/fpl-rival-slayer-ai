@@ -248,25 +248,25 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
   const closestRival = projections.overtake[0];
 
   return (
-    <div className="container mx-auto px-4 py-6 pb-24 md:pb-6">
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+    <div className="container mx-auto px-4 py-4 pb-24 md:py-6 md:pb-6">
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3 md:mb-6">
         <div>
-          <Link href="/" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+          <Link href="/" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
             <ArrowLeft className="h-3 w-3" /> New search
           </Link>
-          <h1 className="mt-2 text-2xl font-bold sm:text-3xl">{ctx.leagueName}</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="mt-1 text-lg font-bold sm:text-2xl">{ctx.leagueName}</h1>
+          <p className="text-xs text-muted-foreground sm:text-sm">
             You: <span className="font-medium text-foreground">{ctx.user.entry.name}</span> · rank{" "}
             <span className="font-medium text-foreground">#{ctx.user.entry.rank}</span> ·{" "}
             <span className="font-medium text-foreground">{ctx.user.entry.total}</span> pts
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <NotificationToggle teamId={teamId} />
-          <div className="flex items-center gap-3 rounded-lg border bg-card/70 px-4 py-2 text-sm">
+          <div className="flex items-center gap-2 rounded-lg border bg-card/70 px-3 py-1.5 text-sm">
             <div className="text-right">
-              <div className="text-xs uppercase tracking-wider text-muted-foreground">GW {projections.gw} deadline</div>
-              <div className="font-mono text-base">{countdown ?? "—"}</div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">GW {projections.gw}</div>
+              <div className="font-mono text-sm">{countdown ?? "—"}</div>
             </div>
             <Button
               variant="outline"
@@ -282,21 +282,6 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
         </div>
       </div>
 
-      {closestRival && (
-        <div className="mb-6 grid gap-3 sm:grid-cols-3">
-          <Stat label="Closest rival" value={closestRival.rivalName} sub={`${closestRival.pointsBehind} pts ahead`} />
-          <Stat
-            label="Projected XI"
-            value={`${projections.user.startingXIPoints.toFixed(1)} pts`}
-            sub={`σ ${projections.user.stdev.toFixed(1)}`}
-          />
-          <Stat
-            label="Overtake odds (closest)"
-            value={`${Math.round(closestRival.overtakeProbability * 100)}%`}
-            sub={`xP delta ${closestRival.expectedDelta > 0 ? "+" : ""}${closestRival.expectedDelta.toFixed(1)}`}
-          />
-        </div>
-      )}
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabId)}>
         <TabsList className="hidden w-full justify-start overflow-x-auto md:flex">
@@ -364,7 +349,26 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
           <RivalChipsPanel teamId={teamId} leagueId={leagueId} />
         </TabsContent>
 
-        <TabsContent value="pitch" className="mt-4">
+        <TabsContent value="pitch" className="mt-4 space-y-4">
+          {closestRival && (
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
+              <Stat
+                label="Closest rival"
+                value={closestRival.rivalName}
+                sub={`${closestRival.pointsBehind} pts ahead`}
+              />
+              <Stat
+                label="Projected XI"
+                value={`${projections.user.startingXIPoints.toFixed(1)}`}
+                sub={`σ ${projections.user.stdev.toFixed(1)}`}
+              />
+              <Stat
+                label="Overtake odds"
+                value={`${Math.round(closestRival.overtakeProbability * 100)}%`}
+                sub={`xP Δ ${closestRival.expectedDelta > 0 ? "+" : ""}${closestRival.expectedDelta.toFixed(1)}`}
+              />
+            </div>
+          )}
           <MySquadLivePanel teamId={teamId} leagueId={leagueId} refreshSignal={refreshSignal} />
         </TabsContent>
 
@@ -463,10 +467,10 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
 
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded-lg border bg-card p-4">
-      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className="mt-1 truncate text-lg font-semibold">{value}</div>
-      {sub && <div className="text-xs text-muted-foreground">{sub}</div>}
+    <div className="rounded-lg border bg-card p-2.5 sm:p-4">
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground sm:text-xs">{label}</div>
+      <div className="mt-1 truncate text-base font-semibold sm:text-lg">{value}</div>
+      {sub && <div className="truncate text-[10px] text-muted-foreground sm:text-xs">{sub}</div>}
     </div>
   );
 }
