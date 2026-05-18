@@ -18,9 +18,9 @@ interface NavItem {
 
 const PRIMARY: NavItem[] = [
   { id: "pitch", label: "Pitch", icon: LayoutGrid },
-  { id: "plan", label: "Plan", icon: Calendar },
   { id: "matches", label: "Matches", icon: Radio },
   { id: "rivals", label: "Rivals", icon: Swords },
+  { id: "plan", label: "Plan", icon: Calendar },
   { id: "history", label: "History", icon: History },
 ];
 
