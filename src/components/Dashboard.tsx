@@ -261,24 +261,25 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
             <span className="font-medium text-foreground">{ctx.user.entry.total}</span> pts
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1.5">
           <NotificationToggle teamId={teamId} />
-          <div className="flex items-center gap-2 rounded-lg border bg-card/70 px-3 py-1.5 text-sm">
-            <div className="text-right">
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">GW {projections.gw}</div>
-              <div className="font-mono text-sm">{countdown ?? "—"}</div>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              aria-label="Refresh all data"
-              onClick={refreshAll}
-              disabled={refreshingAll}
-            >
-              <RefreshCcw className={cn("h-4 w-4", refreshingAll && "animate-spin")} />
-              <span className="ml-1.5 hidden sm:inline">{refreshingAll ? "Refreshing…" : "Refresh"}</span>
-            </Button>
+          <div className="flex items-center gap-1 rounded-md border bg-card/70 px-2 py-1 font-mono text-xs leading-none">
+            <span className="text-muted-foreground">GW{projections.gw}</span>
+            <span aria-hidden className="text-muted-foreground/50">·</span>
+            <span>{countdown ?? "—"}</span>
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            aria-label="Refresh all data"
+            title="Refresh"
+            onClick={refreshAll}
+            disabled={refreshingAll}
+            className="h-8 w-8 px-0 sm:h-9 sm:w-auto sm:px-3"
+          >
+            <RefreshCcw className={cn("h-4 w-4", refreshingAll && "animate-spin")} />
+            <span className="ml-1.5 hidden sm:inline">{refreshingAll ? "Refreshing…" : "Refresh"}</span>
+          </Button>
         </div>
       </div>
 
@@ -288,26 +289,29 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
           <TabsTrigger value="pitch">Pitch</TabsTrigger>
           <TabsTrigger value="plan">Plan</TabsTrigger>
           <TabsTrigger value="matches">Matches</TabsTrigger>
-          <TabsTrigger value="squads">Squads</TabsTrigger>
+          <TabsTrigger value="rivals">Rivals</TabsTrigger>
           <TabsTrigger value="suggested">Suggested</TabsTrigger>
           <TabsTrigger value="differentials">Differentials</TabsTrigger>
           <TabsTrigger value="projections">Projections</TabsTrigger>
-          <TabsTrigger value="live">Live</TabsTrigger>
           <TabsTrigger value="retrospective">Retrospective</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="squads" className="mt-4 space-y-3">
-          <p className="text-xs text-muted-foreground">
-            Tap any of your players to run a what-if swap simulation.
-          </p>
-          <SquadCompareTable
-            user={ctx.user}
-            userProjection={projections.user}
-            rivals={ctx.rivals}
-            rivalProjections={projections.rivals}
-            eo={eo}
-            onUserPlayerClick={(id) => setWhatIfOutId(id)}
-          />
+        <TabsContent value="rivals" className="mt-4 space-y-4">
+          <LivePanel teamId={teamId} leagueId={leagueId} refreshSignal={refreshSignal} />
+          <div className="space-y-2">
+            <h2 className="text-sm font-semibold">Squad comparison</h2>
+            <p className="text-xs text-muted-foreground">
+              Tap any of your players to run a what-if swap simulation.
+            </p>
+            <SquadCompareTable
+              user={ctx.user}
+              userProjection={projections.user}
+              rivals={ctx.rivals}
+              rivalProjections={projections.rivals}
+              eo={eo}
+              onUserPlayerClick={(id) => setWhatIfOutId(id)}
+            />
+          </div>
         </TabsContent>
 
         <TabsContent value="differentials" className="mt-4 space-y-4">
@@ -370,10 +374,6 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
             </div>
           )}
           <MySquadLivePanel teamId={teamId} leagueId={leagueId} refreshSignal={refreshSignal} />
-        </TabsContent>
-
-        <TabsContent value="live" className="mt-4">
-          <LivePanel teamId={teamId} leagueId={leagueId} refreshSignal={refreshSignal} />
         </TabsContent>
 
         <TabsContent value="matches" className="mt-4">

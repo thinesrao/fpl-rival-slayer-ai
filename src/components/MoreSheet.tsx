@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { BarChart3, GitCompare, History, Lightbulb, Radio, X } from "lucide-react";
+import { BarChart3, GitCompare, History, Lightbulb, X } from "lucide-react";
 import type { TabId } from "./BottomNav";
 import { cn } from "@/lib/utils";
 
@@ -16,7 +16,6 @@ const MORE_ITEMS: MoreItem[] = [
   { id: "suggested", label: "Suggested", subtitle: "AI's recommended squad + transfers", icon: Lightbulb },
   { id: "differentials", label: "Differentials", subtitle: "Top-10 league ownership heatmap", icon: GitCompare },
   { id: "projections", label: "Projections", subtitle: "xP chart + overtake meter", icon: BarChart3 },
-  { id: "live", label: "Live", subtitle: "Running scoreboard vs rivals", icon: Radio },
   { id: "retrospective", label: "Retrospective", subtitle: "Last GW review + luck audit", icon: History },
 ];
 

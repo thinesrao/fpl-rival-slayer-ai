@@ -62,11 +62,12 @@ export function NotificationToggle({ teamId }: { teamId: number }) {
         variant="outline"
         size="sm"
         disabled
-        className="gap-1.5 text-xs"
-        title={unsupportedReason}
+        className="gap-1.5 px-2 text-xs sm:px-3"
+        title={unsupportedReason ?? "Alerts unavailable"}
+        aria-label="Alerts unavailable"
       >
         <BellOff className="h-3.5 w-3.5" />
-        Alerts unavailable
+        <span className="hidden sm:inline">Alerts unavailable</span>
       </Button>
     );
   }
@@ -135,29 +136,61 @@ export function NotificationToggle({ teamId }: { teamId: number }) {
 
   if (status === "blocked") {
     return (
-      <Button variant="outline" size="sm" disabled className="gap-1.5 text-xs">
+      <Button
+        variant="outline"
+        size="sm"
+        disabled
+        className="gap-1.5 px-2 text-xs sm:px-3"
+        aria-label="Alerts blocked"
+        title="Alerts blocked"
+      >
         <BellOff className="h-3.5 w-3.5" />
-        Alerts blocked
+        <span className="hidden sm:inline">Alerts blocked</span>
       </Button>
     );
   }
   if (status === "on") {
     return (
       <div className="flex items-center gap-1.5">
-        <Button variant="outline" size="sm" onClick={sendTest} disabled={busy} className="gap-1.5 text-xs">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={sendTest}
+          disabled={busy}
+          className="gap-1.5 px-2 text-xs sm:px-3"
+          aria-label="Send test alert"
+          title="Send test alert"
+        >
           <Bell className="h-3.5 w-3.5 text-success" />
-          Test
+          <span className="hidden sm:inline">Test</span>
         </Button>
-        <Button variant="ghost" size="sm" onClick={disable} disabled={busy} className="gap-1.5 text-xs">
-          Mute
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={disable}
+          disabled={busy}
+          className="gap-1.5 px-2 text-xs sm:px-3"
+          aria-label="Mute alerts"
+          title="Mute alerts"
+        >
+          <BellOff className="h-3.5 w-3.5 sm:hidden" />
+          <span className="hidden sm:inline">Mute</span>
         </Button>
       </div>
     );
   }
   return (
-    <Button variant="outline" size="sm" onClick={enable} disabled={busy} className="gap-1.5 text-xs">
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={enable}
+      disabled={busy}
+      className="gap-1.5 px-2 text-xs sm:px-3"
+      aria-label="Enable alerts"
+      title="Enable alerts"
+    >
       <Bell className="h-3.5 w-3.5" />
-      Enable alerts
+      <span className="hidden sm:inline">Enable alerts</span>
     </Button>
   );
 }

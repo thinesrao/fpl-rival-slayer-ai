@@ -1,16 +1,15 @@
 "use client";
 
-import { Calendar, LayoutGrid, LayoutList, Radio, Users } from "lucide-react";
+import { Calendar, LayoutGrid, LayoutList, Radio, Swords } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type TabId =
-  | "squads"
+  | "rivals"
   | "differentials"
   | "projections"
   | "plan"
   | "suggested"
   | "pitch"
-  | "live"
   | "matches"
   | "retrospective";
 
@@ -24,7 +23,7 @@ const PRIMARY: NavItem[] = [
   { id: "pitch", label: "Pitch", icon: LayoutGrid },
   { id: "plan", label: "Plan", icon: Calendar },
   { id: "matches", label: "Matches", icon: Radio },
-  { id: "squads", label: "Squads", icon: Users },
+  { id: "rivals", label: "Rivals", icon: Swords },
   { id: "__more", label: "More", icon: LayoutList },
 ];
 
