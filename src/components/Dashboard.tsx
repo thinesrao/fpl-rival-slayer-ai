@@ -285,9 +285,9 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabId)}>
         <TabsList className="hidden w-full justify-start md:flex">
           <TabsTrigger value="pitch">Pitch</TabsTrigger>
-          <TabsTrigger value="plan">Plan</TabsTrigger>
           <TabsTrigger value="matches">Matches</TabsTrigger>
           <TabsTrigger value="rivals">Rivals</TabsTrigger>
+          <TabsTrigger value="plan">Plan</TabsTrigger>
           <TabsTrigger value="history">History</TabsTrigger>
         </TabsList>
 
