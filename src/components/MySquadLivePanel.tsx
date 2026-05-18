@@ -8,6 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { PlayerDetailModal } from "@/components/PlayerDetailModal";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AnimatedNumber } from "@/components/AnimatedNumber";
+import { useCaptainConfetti } from "@/lib/use-captain-confetti";
 import { cn } from "@/lib/utils";
 
 interface LivePlayer {
@@ -114,6 +116,12 @@ export function MySquadLivePanel({ teamId, leagueId, refreshSignal = 0 }: Props)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshSignal]);
 
+  const captainFromData = q.data?.starters.find((p) => p.isCaptain) ?? null;
+  useCaptainConfetti({
+    captainPoints: captainFromData?.pointsWithMultiplier,
+    enabled: captainFromData?.fixtureStatus === "live" || captainFromData?.fixtureStatus === "finished",
+  });
+
   if (q.isLoading) return <Skeleton className="h-[40rem] w-full" />;
   if (q.error) {
     return (
@@ -128,7 +136,7 @@ export function MySquadLivePanel({ teamId, leagueId, refreshSignal = 0 }: Props)
   const def = data.starters.filter((p) => p.elementType === 2);
   const mid = data.starters.filter((p) => p.elementType === 3);
   const fwd = data.starters.filter((p) => p.elementType === 4);
-  const captain = data.starters.find((p) => p.isCaptain) ?? null;
+  const captain = captainFromData;
 
   const onTileClick = (p: LivePlayer) => {
     if (p.playerId > 0) setDetailPlayerId(p.playerId);
@@ -197,7 +205,7 @@ function MetricsHeader({ metrics }: { metrics: LiveMetrics }) {
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
       <Stat
         label="GW Net"
-        value={`${metrics.gwNetPoints >= 0 ? "" : ""}${metrics.gwNetPoints}`}
+        value={<AnimatedNumber value={metrics.gwNetPoints} duration={0.6} />}
         sub={metrics.transferCost > 0 ? `gross ${metrics.gwGrossPoints} (−${metrics.transferCost})` : undefined}
       />
       <Stat
@@ -226,7 +234,7 @@ function MetricsHeader({ metrics }: { metrics: LiveMetrics }) {
   );
 }
 
-function Stat({ label, value, sub }: { label: string; value: string; sub?: React.ReactNode }) {
+function Stat({ label, value, sub }: { label: string; value: React.ReactNode; sub?: React.ReactNode }) {
   return (
     <div className="rounded-md border bg-card p-2.5">
       <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
@@ -336,7 +344,7 @@ function Tile({ player, onClick, small = false }: { player: LivePlayer; onClick:
           {player.autosubbedOut && <span className="ml-1 text-rose-600">✗</span>}
         </div>
         <div className={cn("font-mono font-semibold text-emerald-700", small ? "text-[11px]" : "text-[12px]")}>
-          {totalPoints} pts
+          <AnimatedNumber value={totalPoints} duration={0.5} suffix=" pts" />
           {player.multiplier === 2 && <span className="ml-1 text-[9px] font-normal text-slate-500">×2</span>}
           {player.multiplier === 3 && <span className="ml-1 text-[9px] font-normal text-amber-600">×3</span>}
         </div>
