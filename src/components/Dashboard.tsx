@@ -21,7 +21,6 @@ import { LeagueHeatmap } from "@/components/LeagueHeatmap";
 import { MatchesPanel } from "@/components/MatchesPanel";
 import { MySquadLivePanel } from "@/components/MySquadLivePanel";
 import { BottomNav, type TabId } from "@/components/BottomNav";
-import { MoreSheet } from "@/components/MoreSheet";
 import { FloatingChat } from "@/components/FloatingChat";
 import { IntelPanel } from "@/components/IntelPanel";
 import { RetrospectivePanel } from "@/components/RetrospectivePanel";
@@ -192,7 +191,6 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
   const [refreshSignal, setRefreshSignal] = useState(0);
   const [whatIfOutId, setWhatIfOutId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>("pitch");
-  const [moreOpen, setMoreOpen] = useState(false);
 
   const refreshAll = async () => {
     setRefreshingAll(true);
@@ -285,73 +283,13 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
 
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabId)}>
-        <TabsList className="hidden w-full justify-start overflow-x-auto md:flex">
+        <TabsList className="hidden w-full justify-start md:flex">
           <TabsTrigger value="pitch">Pitch</TabsTrigger>
           <TabsTrigger value="plan">Plan</TabsTrigger>
           <TabsTrigger value="matches">Matches</TabsTrigger>
           <TabsTrigger value="rivals">Rivals</TabsTrigger>
-          <TabsTrigger value="suggested">Suggested</TabsTrigger>
-          <TabsTrigger value="differentials">Differentials</TabsTrigger>
-          <TabsTrigger value="projections">Projections</TabsTrigger>
-          <TabsTrigger value="retrospective">Retrospective</TabsTrigger>
+          <TabsTrigger value="history">History</TabsTrigger>
         </TabsList>
-
-        <TabsContent value="rivals" className="mt-4 space-y-4">
-          <LivePanel teamId={teamId} leagueId={leagueId} refreshSignal={refreshSignal} />
-          <div className="space-y-2">
-            <h2 className="text-sm font-semibold">Squad comparison</h2>
-            <p className="text-xs text-muted-foreground">
-              Tap any of your players to run a what-if swap simulation.
-            </p>
-            <SquadCompareTable
-              user={ctx.user}
-              userProjection={projections.user}
-              rivals={ctx.rivals}
-              rivalProjections={projections.rivals}
-              eo={eo}
-              onUserPlayerClick={(id) => setWhatIfOutId(id)}
-            />
-          </div>
-        </TabsContent>
-
-        <TabsContent value="differentials" className="mt-4 space-y-4">
-          {analysisQuery.isLoading && aiEnabled ? (
-            <Skeleton className="h-40 w-full" />
-          ) : (
-            <DifferentialsCard userOnly={diff.userOnly} rivalOnly={diff.rivalOnly} />
-          )}
-          <LeagueHeatmap leagueId={leagueId} topN={10} />
-          {eo && priceMoves && <IntelPanel eo={eo} priceMoves={priceMoves} />}
-        </TabsContent>
-
-        <TabsContent value="projections" className="mt-4 grid gap-4 lg:grid-cols-2">
-          <ProjectionsChart
-            user={ctx.user}
-            userProjection={projections.user}
-            rivals={ctx.rivals}
-            rivalProjections={projections.rivals}
-          />
-          <OvertakeMeter odds={projections.overtake} />
-        </TabsContent>
-
-        <TabsContent value="plan" className="mt-4 space-y-4">
-          {data.horizon && data.teams ? (
-            <PlanPanel
-              horizon={data.horizon.horizon}
-              cumulative={data.horizon.cumulative}
-              context={ctx}
-              teams={data.teams}
-            />
-          ) : (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Plan horizon unavailable</CardTitle>
-                <CardDescription>Refresh to compute the next 3 gameweeks.</CardDescription>
-              </CardHeader>
-            </Card>
-          )}
-          <RivalChipsPanel teamId={teamId} leagueId={leagueId} />
-        </TabsContent>
 
         <TabsContent value="pitch" className="mt-4 space-y-4">
           {closestRival && (
@@ -376,32 +314,66 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
           <MySquadLivePanel teamId={teamId} leagueId={leagueId} refreshSignal={refreshSignal} />
         </TabsContent>
 
-        <TabsContent value="matches" className="mt-4">
-          <MatchesPanel teamId={teamId} leagueId={leagueId} refreshSignal={refreshSignal} />
-        </TabsContent>
+        <TabsContent value="plan" className="mt-4 space-y-6">
+          <SectionNav
+            sections={[
+              { id: "outlook", label: "Outlook" },
+              { id: "projections", label: "Projections" },
+              { id: "suggested", label: "Suggested" },
+              { id: "chips", label: "Chips" },
+            ]}
+          />
 
-        <TabsContent value="retrospective" className="mt-4">
-          <RetrospectivePanel teamId={teamId} leagueId={leagueId} />
-        </TabsContent>
+          <section id="outlook" className="space-y-2 scroll-mt-20">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Outlook</h2>
+            {data.horizon && data.teams ? (
+              <PlanPanel
+                horizon={data.horizon.horizon}
+                cumulative={data.horizon.cumulative}
+                context={ctx}
+                teams={data.teams}
+              />
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Plan horizon unavailable</CardTitle>
+                  <CardDescription>Refresh to compute the next 3 gameweeks.</CardDescription>
+                </CardHeader>
+              </Card>
+            )}
+          </section>
 
-        <TabsContent value="suggested" className="mt-4">{/* Suggested squad + transfers */}
-          {!aiEnabled ? (
-            <Alert variant="warning">
-              <AlertTitle>AI Coach disabled</AlertTitle>
-              <AlertDescription>
-                Set <code className="rounded bg-muted px-1">GEMINI_API_KEY</code> in your environment to enable
-                live news-grounded recommendations.
-              </AlertDescription>
-            </Alert>
-          ) : analysisQuery.isLoading ? (
-            <AiLoadingShell />
-          ) : analysisQuery.error ? (
-            <Alert variant="destructive">
-              <AlertTitle>AI request failed</AlertTitle>
-              <AlertDescription>{(analysisQuery.error as Error).message}</AlertDescription>
-            </Alert>
-          ) : ai ? (
-            <div className="space-y-6">
+          <section id="projections" className="space-y-2 scroll-mt-20">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Projections</h2>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <ProjectionsChart
+                user={ctx.user}
+                userProjection={projections.user}
+                rivals={ctx.rivals}
+                rivalProjections={projections.rivals}
+              />
+              <OvertakeMeter odds={projections.overtake} />
+            </div>
+          </section>
+
+          <section id="suggested" className="space-y-2 scroll-mt-20">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Suggested moves</h2>
+            {!aiEnabled ? (
+              <Alert variant="warning">
+                <AlertTitle>AI Coach disabled</AlertTitle>
+                <AlertDescription>
+                  Set <code className="rounded bg-muted px-1">GEMINI_API_KEY</code> in your environment to enable
+                  live news-grounded recommendations.
+                </AlertDescription>
+              </Alert>
+            ) : analysisQuery.isLoading ? (
+              <AiLoadingShell />
+            ) : analysisQuery.error ? (
+              <Alert variant="destructive">
+                <AlertTitle>AI request failed</AlertTitle>
+                <AlertDescription>{(analysisQuery.error as Error).message}</AlertDescription>
+              </Alert>
+            ) : ai ? (
               <RecommendationsPanel
                 ai={ai}
                 freeTransfers={analysisQuery.data?.freeTransfers}
@@ -417,9 +389,7 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
                   if (playerId > 0) setWhatIfOutId(playerId);
                 }}
               />
-            </div>
-          ) : (
-            <div className="space-y-6">
+            ) : (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">Run AI analysis</CardTitle>
@@ -429,8 +399,74 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
                   <Button onClick={() => refetchAnalysis(false)}>Run analysis</Button>
                 </CardContent>
               </Card>
-            </div>
+            )}
+          </section>
+
+          <section id="chips" className="space-y-2 scroll-mt-20">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Chip timing</h2>
+            <RivalChipsPanel teamId={teamId} leagueId={leagueId} />
+          </section>
+        </TabsContent>
+
+        <TabsContent value="matches" className="mt-4">
+          <MatchesPanel teamId={teamId} leagueId={leagueId} refreshSignal={refreshSignal} />
+        </TabsContent>
+
+        <TabsContent value="rivals" className="mt-4 space-y-6">
+          <SectionNav
+            sections={[
+              { id: "live", label: "Live" },
+              { id: "squad", label: "Squad" },
+              { id: "diff", label: "Differentials" },
+              { id: "heatmap", label: "Ownership" },
+              { id: "intel", label: "Intel" },
+            ]}
+          />
+
+          <section id="live" className="space-y-2 scroll-mt-20">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Live</h2>
+            <LivePanel teamId={teamId} leagueId={leagueId} refreshSignal={refreshSignal} />
+          </section>
+
+          <section id="squad" className="space-y-2 scroll-mt-20">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Squad comparison</h2>
+            <p className="text-xs text-muted-foreground">
+              Tap any of your players to run a what-if swap simulation.
+            </p>
+            <SquadCompareTable
+              user={ctx.user}
+              userProjection={projections.user}
+              rivals={ctx.rivals}
+              rivalProjections={projections.rivals}
+              eo={eo}
+              onUserPlayerClick={(id) => setWhatIfOutId(id)}
+            />
+          </section>
+
+          <section id="diff" className="space-y-2 scroll-mt-20">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Differentials</h2>
+            {analysisQuery.isLoading && aiEnabled ? (
+              <Skeleton className="h-40 w-full" />
+            ) : (
+              <DifferentialsCard userOnly={diff.userOnly} rivalOnly={diff.rivalOnly} />
+            )}
+          </section>
+
+          <section id="heatmap" className="space-y-2 scroll-mt-20">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">League ownership</h2>
+            <LeagueHeatmap leagueId={leagueId} topN={10} />
+          </section>
+
+          {eo && priceMoves && (
+            <section id="intel" className="space-y-2 scroll-mt-20">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Intel</h2>
+              <IntelPanel eo={eo} priceMoves={priceMoves} />
+            </section>
           )}
+        </TabsContent>
+
+        <TabsContent value="history" className="mt-4">
+          <RetrospectivePanel teamId={teamId} leagueId={leagueId} />
         </TabsContent>
       </Tabs>
 
@@ -442,26 +478,31 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
         outPlayerId={whatIfOutId}
       />
 
-      {/* Mobile-only bottom nav + More sheet */}
-      <BottomNav
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        onOpenMore={() => setMoreOpen(true)}
-      />
-      <MoreSheet
-        open={moreOpen}
-        onClose={() => setMoreOpen(false)}
-        onPick={(id) => setActiveTab(id)}
-      />
+      {/* Mobile-only bottom nav (5 primary tabs, no More overflow) */}
+      <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
 
-      {/* Floating co-pilot chat — hidden on the Suggested tab where the
-       *  embedded recommendations panel is the focus. */}
-      <FloatingChat
-        teamId={teamId}
-        leagueId={leagueId}
-        hidden={activeTab === "suggested"}
-      />
+      {/* Floating co-pilot chat available on every tab */}
+      <FloatingChat teamId={teamId} leagueId={leagueId} />
     </div>
+  );
+}
+
+function SectionNav({ sections }: { sections: { id: string; label: string }[] }) {
+  return (
+    <nav
+      aria-label="Section navigation"
+      className="sticky top-0 z-10 -mx-4 flex gap-1.5 overflow-x-auto border-b bg-background/95 px-4 py-2 backdrop-blur"
+    >
+      {sections.map((s) => (
+        <a
+          key={s.id}
+          href={`#${s.id}`}
+          className="shrink-0 rounded-full border bg-card px-3 py-1 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/60 hover:text-foreground"
+        >
+          {s.label}
+        </a>
+      ))}
+    </nav>
   );
 }
 
