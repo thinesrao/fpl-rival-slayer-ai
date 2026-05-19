@@ -11,7 +11,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { SquadCompareTable } from "@/components/SquadCompareTable";
 import { DifferentialsCard } from "@/components/DifferentialsCard";
-import { ProjectionsChart } from "@/components/ProjectionsChart";
 import { OvertakeMeter } from "@/components/OvertakeMeter";
 import { RecommendationsPanel } from "@/components/RecommendationsPanel";
 import { PlanPanel } from "@/components/PlanPanel";
@@ -392,15 +391,7 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
 
           <section id="projections" className="space-y-2 scroll-mt-20">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Projections</h2>
-            <div className="grid gap-4 lg:grid-cols-2">
-              <ProjectionsChart
-                user={ctx.user}
-                userProjection={projections.user}
-                rivals={ctx.rivals}
-                rivalProjections={projections.rivals}
-              />
-              <OvertakeMeter odds={projections.overtake} />
-            </div>
+            <OvertakeMeter odds={projections.overtake} />
           </section>
 
           <section id="suggested" className="space-y-2 scroll-mt-20">
