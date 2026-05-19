@@ -1,6 +1,6 @@
 "use client";
 
-import { Calendar, History, LayoutGrid, Radio, Swords } from "lucide-react";
+import { Calendar, ClipboardList, LayoutGrid, Radio, Swords } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type TabId =
@@ -8,7 +8,7 @@ export type TabId =
   | "plan"
   | "matches"
   | "rivals"
-  | "history";
+  | "drafts";
 
 interface NavItem {
   id: TabId;
@@ -21,7 +21,7 @@ const PRIMARY: NavItem[] = [
   { id: "matches", label: "Matches", icon: Radio },
   { id: "rivals", label: "Rivals", icon: Swords },
   { id: "plan", label: "Plan", icon: Calendar },
-  { id: "history", label: "History", icon: History },
+  { id: "drafts", label: "Drafts", icon: ClipboardList },
 ];
 
 interface Props {

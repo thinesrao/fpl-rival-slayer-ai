@@ -195,6 +195,82 @@ export async function buildRivalContext(
   };
 }
 
+/** Like buildRivalContext but returns every manager in the league (not just
+ *  the N above the user). Used by the Live tab to render the full standings.
+ *  Walks every standings page (capped at MAX_PAGES) so this is heavier than
+ *  the default 3-rival path — expect 1 FPL call per manager for picks. */
+export async function buildFullLeagueContext(
+  leagueId: number,
+  teamId: number,
+): Promise<{ context: RivalContext; bs: FplBootstrap; targetGw: number }> {
+  const [bs, walked] = await Promise.all([
+    getBootstrap(),
+    walkAllPages(leagueId, teamId),
+  ]);
+  const { leagueName, allEntries, userIndex } = walked;
+  const userRow = allEntries[userIndex];
+
+  const picksGw = await resolvePicksGw(teamId, bs);
+  const target = targetEvent(bs);
+
+  const allOthers = allEntries.filter((_, i) => i !== userIndex);
+  const [userSquad, ...rivalSquads] = await Promise.all([
+    buildManagerSquad(
+      userRow.entry,
+      picksGw,
+      {
+        rank: userRow.rank,
+        total: userRow.total,
+        entry_name: userRow.entry_name,
+        player_name: userRow.player_name,
+      },
+      bs,
+    ),
+    ...allOthers.map((row) =>
+      buildManagerSquad(
+        row.entry,
+        picksGw,
+        {
+          rank: row.rank,
+          total: row.total,
+          entry_name: row.entry_name,
+          player_name: row.player_name,
+        },
+        bs,
+      ).catch(() => null),
+    ),
+  ]);
+
+  const cleanRivals = rivalSquads.filter((s): s is ManagerSquad => s !== null);
+  const entry = await getEntry(teamId).catch(() => null);
+  if (entry?.name) userSquad.entry.name = entry.name;
+
+  return {
+    context: { user: userSquad, rivals: cleanRivals, leagueName },
+    bs,
+    targetGw: target.id,
+  };
+}
+
+async function walkAllPages(
+  leagueId: number,
+  teamId: number,
+): Promise<{ leagueName: string; allEntries: FplLeagueStandingEntry[]; userIndex: number }> {
+  const collected: FplLeagueStandingEntry[] = [];
+  let leagueName = "";
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const res = await getLeagueStandings(leagueId, page);
+    leagueName ||= res.league.name;
+    collected.push(...res.standings.results);
+    if (!res.standings.has_next) break;
+  }
+  const userIndex = collected.findIndex((e) => e.entry === teamId);
+  if (userIndex === -1) {
+    throw new FplError(404, `Team ${teamId} not found in league ${leagueId} (within ${MAX_PAGES} pages)`);
+  }
+  return { leagueName, allEntries: collected, userIndex };
+}
+
 export function computeDifferentials(ctx: RivalContext) {
   // Players the user owns that NO rival owns (advantage) and vice-versa.
   const userIds = new Set(ctx.user.picks.map((s) => s.player.id));
