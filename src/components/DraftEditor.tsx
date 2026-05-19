@@ -233,7 +233,9 @@ export function DraftEditor({ teamId, initial, onClose, onSaved }: Props) {
         position: p.position,
         cost: Math.round(p.price * 10),
         xPoints: p.form,
-        opponent: null as string | null,
+        // Next-GW opponent ("MUN (H)") — same field SuggestedSquadPitch
+        // already shows in fixture mode. price mode now shows it too.
+        opponent: p.nextOpponent ?? null,
         isCaptain: draft.captainId === id,
         isVice: draft.viceId === id,
         isIn: false,
