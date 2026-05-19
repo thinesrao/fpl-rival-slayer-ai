@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ClipboardList, Pencil, Plus, Share2, Trash2 } from "lucide-react";
+import { ArrowLeftRight, ClipboardList, Pencil, Plus, Share2, Trash2 } from "lucide-react";
 import { encodeDraft } from "@/lib/drafts/encode";
+import { CompareDrafts } from "@/components/CompareDrafts";
 import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,7 @@ interface Props {
 export function DraftsPanel({ teamId }: Props) {
   const [drafts, setDrafts] = useState<SquadDraft[]>([]);
   const [editing, setEditing] = useState<SquadDraft | null>(null);
+  const [comparing, setComparing] = useState(false);
 
   useEffect(() => {
     setDrafts(loadDrafts(teamId));
@@ -53,7 +55,7 @@ export function DraftsPanel({ teamId }: Props) {
   };
 
   const handleShare = async (d: SquadDraft) => {
-    const url = `${window.location.origin}/api/og/draft?d=${encodeDraft(d)}`;
+    const url = `${window.location.origin}/draft/${encodeDraft(d)}`;
     if (navigator.share) {
       try { await navigator.share({ title: `${d.name} — FPL draft`, url }); return; }
       catch (e) { if ((e as Error).name === "AbortError") return; }
@@ -73,9 +75,16 @@ export function DraftsPanel({ teamId }: Props) {
             Sketch alternative XIs within your budget. Saved locally — review across the week, pick one before the deadline.
           </CardDescription>
         </div>
-        <Button size="sm" onClick={createDraft}>
-          <Plus className="mr-1 h-4 w-4" /> New draft
-        </Button>
+        <div className="flex gap-2">
+          {drafts.length >= 2 && (
+            <Button size="sm" variant="outline" onClick={() => setComparing(true)}>
+              <ArrowLeftRight className="mr-1 h-4 w-4" /> Compare
+            </Button>
+          )}
+          <Button size="sm" onClick={createDraft}>
+            <Plus className="mr-1 h-4 w-4" /> New draft
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         {drafts.length === 0 ? (
@@ -141,6 +150,10 @@ export function DraftsPanel({ teamId }: Props) {
           onClose={() => setEditing(null)}
           onSaved={handleSaved}
         />
+      )}
+
+      {comparing && (
+        <CompareDrafts drafts={drafts} onClose={() => setComparing(false)} />
       )}
     </Card>
   );

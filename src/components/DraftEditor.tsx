@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, Plus, Share2, Trash2, X } from "lucide-react";
+import { Check, Loader2, Plus, Share2, Sparkles, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PlayerPhoto } from "@/components/PlayerPhoto";
@@ -12,6 +12,12 @@ import { SLOT_LABELS, SLOTS, type PickerPlayer, type Position, type SquadDraft }
 import { validateDraft } from "@/lib/drafts/validate";
 import { upsertDraft } from "@/lib/drafts/storage";
 import { encodeDraft } from "@/lib/drafts/encode";
+import {
+  FORMATIONS,
+  type Formation,
+  pickStartingXI,
+  safeFormation,
+} from "@/lib/drafts/formation";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +32,8 @@ export function DraftEditor({ teamId, initial, onClose, onSaved }: Props) {
   const [draft, setDraft] = useState<SquadDraft>(initial);
   const [pickerSlot, setPickerSlot] = useState<number | null>(null);
   const [hoverInfo, setHoverInfo] = useState<{ id: number | null; label: string }>({ id: null, label: "" });
+  const [critique, setCritique] = useState<string | null>(null);
+  const [critiqueLoading, setCritiqueLoading] = useState(false);
 
   // DOM anchors keyed by player id — populated by the slot tiles.
   const anchorRefs = useRef<Map<number, HTMLElement>>(new Map());
@@ -59,6 +67,21 @@ export function DraftEditor({ teamId, initial, onClose, onSaved }: Props) {
   const validation = useMemo(() => validateDraft(draft, byId), [draft, byId]);
   const remaining = draft.budget / 10 - validation.totalCost;
 
+  // Resolve the active formation. If the user's choice no longer fits the
+  // current squad (e.g. they swapped a DEF for a MID), fall back to the
+  // largest formation that does.
+  const formation: Formation = useMemo(
+    () => safeFormation(draft, byId, draft.formation as Formation | undefined),
+    [draft, byId],
+  );
+
+  // Starters: respect a manually-set startingXI if it still fits the
+  // formation; otherwise auto-pick by totalPoints.
+  const startingXI = useMemo(() => {
+    if (!byId.size) return new Set<number>();
+    return new Set(pickStartingXI(draft, byId, formation));
+  }, [draft, byId, formation]);
+
   const setPlayerAtSlot = (slot: number, playerId: number | null) => {
     setDraft((d) => {
       const picks = [...d.picks];
@@ -75,8 +98,32 @@ export function DraftEditor({ teamId, initial, onClose, onSaved }: Props) {
     onSaved(draft);
   };
 
+  const runCritique = async () => {
+    setCritiqueLoading(true);
+    setCritique(null);
+    try {
+      const res = await fetch("/api/drafts/critique", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ encoded: encodeDraft(draft) }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        const msg = body?.message || body?.error || "Critique failed";
+        toast.error(msg);
+        setCritique(null);
+        return;
+      }
+      setCritique(body.markdown as string);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setCritiqueLoading(false);
+    }
+  };
+
   const share = async () => {
-    const url = `${window.location.origin}/api/og/draft?d=${encodeDraft(draft)}`;
+    const url = `${window.location.origin}/draft/${encodeDraft(draft)}`;
     const title = `${draft.name} — FPL draft`;
     if (navigator.share) {
       try {
@@ -173,6 +220,31 @@ export function DraftEditor({ teamId, initial, onClose, onSaved }: Props) {
           </div>
         </div>
 
+        {/* Formation picker */}
+        <div className="flex items-center gap-2 overflow-x-auto border-b bg-background/40 px-4 py-2 text-[11px]">
+          <span className="shrink-0 font-semibold uppercase tracking-widest text-muted-foreground">
+            Formation
+          </span>
+          {FORMATIONS.map((f) => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => setDraft((d) => ({ ...d, formation: f }))}
+              className={cn(
+                "shrink-0 rounded-full border px-2.5 py-0.5 font-mono transition-colors",
+                formation === f
+                  ? "border-primary bg-primary/15 text-primary"
+                  : "border-border bg-card/40 text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {f}
+            </button>
+          ))}
+          <span className="ml-auto shrink-0 text-muted-foreground">
+            Starting XI auto-picked by total points · bench dimmed
+          </span>
+        </div>
+
         {/* Budget meter */}
         <div className="border-b bg-card/60 px-4 py-2 text-xs">
           <div className="mb-1 flex items-center justify-between">
@@ -209,17 +281,24 @@ export function DraftEditor({ teamId, initial, onClose, onSaved }: Props) {
                   const isCaptain = id != null && draft.captainId === id;
                   const isVice = id != null && draft.viceId === id;
                   const isHovered = hoverInfo.id === id && id != null;
+                  const isBench = id != null && !startingXI.has(id);
                   return (
                     <div
                       key={slotIdx}
                       className={cn(
                         "relative flex flex-col items-center gap-1 rounded-lg border bg-card p-2 transition-all",
-                        isCaptain && "ring-2 ring-amber-400",
-                        isVice && !isCaptain && "ring-1 ring-slate-300",
-                        isHovered && hoverInfo.label === "C" && "scale-105 ring-2 ring-amber-300",
-                        isHovered && hoverInfo.label === "V" && "scale-105 ring-2 ring-slate-200",
+                        isBench && "opacity-50",
+                        isCaptain && "opacity-100 ring-2 ring-amber-400",
+                        isVice && !isCaptain && "opacity-100 ring-1 ring-slate-300",
+                        isHovered && hoverInfo.label === "C" && "scale-105 opacity-100 ring-2 ring-amber-300",
+                        isHovered && hoverInfo.label === "V" && "scale-105 opacity-100 ring-2 ring-slate-200",
                       )}
                     >
+                      {isBench && (
+                        <span className="absolute left-1 top-1 rounded-sm bg-white/10 px-1 text-[8px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          Bench
+                        </span>
+                      )}
                       {p ? (
                         <>
                           <div
@@ -297,7 +376,12 @@ export function DraftEditor({ teamId, initial, onClose, onSaved }: Props) {
               ))}
             </ul>
           )}
-          <div className="flex items-center justify-between gap-2">
+          {critique && (
+            <div className="mb-2 max-h-60 overflow-y-auto whitespace-pre-wrap rounded-md border border-violet-500/30 bg-violet-500/5 p-3 text-[11px] leading-relaxed">
+              {critique}
+            </div>
+          )}
+          <div className="flex flex-wrap items-center justify-between gap-2">
             {validation.ok ? (
               <Badge variant="success" className="gap-1">
                 <Check className="h-3 w-3" /> Valid squad
@@ -305,8 +389,22 @@ export function DraftEditor({ teamId, initial, onClose, onSaved }: Props) {
             ) : (
               <Badge variant="outline" className="text-muted-foreground">Draft (incomplete)</Badge>
             )}
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={runCritique}
+                disabled={critiqueLoading || validation.filled < 11}
+                title={validation.filled < 11 ? "Fill at least 11 slots first" : "Get an AI verdict on this draft"}
+              >
+                {critiqueLoading ? (
+                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="mr-1 h-3.5 w-3.5 text-violet-300" />
+                )}
+                {critiqueLoading ? "Thinking…" : critique ? "Re-roast" : "Roast my draft"}
+              </Button>
               <Button variant="outline" size="sm" onClick={share} disabled={validation.filled === 0}>
                 <Share2 className="mr-1 h-3.5 w-3.5" /> Share
               </Button>

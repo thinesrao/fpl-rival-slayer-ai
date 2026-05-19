@@ -158,6 +158,15 @@ async function fetchJson<T>(url: string): Promise<T> {
 export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
   const queryClient = useQueryClient();
   const projectionsForceRef = useRef(false);
+  // Cache the active teamId so cross-page features (e.g. /draft/<encoded>
+  // import) can pre-fill it without making the user type it again.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem("fpl-rival-slayer:teamId", String(teamId));
+      window.localStorage.setItem("fpl-rival-slayer:leagueId", String(leagueId));
+    } catch {}
+  }, [teamId, leagueId]);
   const projectionsQuery = useQuery({
     queryKey: ["projections", teamId, leagueId],
     queryFn: () => {
