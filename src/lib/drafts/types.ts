@@ -13,6 +13,8 @@ export interface SquadDraft {
   viceId: number | null;
   /** Optional starting XI for visualisation. If absent we auto-pick. */
   startingXI?: number[];
+  /** Preferred formation (e.g. "4-4-2"). Auto-resolved if not yet set. */
+  formation?: string;
   notes?: string;
   createdAt: string;
   updatedAt: string;

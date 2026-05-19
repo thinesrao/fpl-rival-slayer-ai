@@ -12,6 +12,12 @@ import { SLOT_LABELS, SLOTS, type PickerPlayer, type Position, type SquadDraft }
 import { validateDraft } from "@/lib/drafts/validate";
 import { upsertDraft } from "@/lib/drafts/storage";
 import { encodeDraft } from "@/lib/drafts/encode";
+import {
+  FORMATIONS,
+  type Formation,
+  pickStartingXI,
+  safeFormation,
+} from "@/lib/drafts/formation";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -58,6 +64,21 @@ export function DraftEditor({ teamId, initial, onClose, onSaved }: Props) {
 
   const validation = useMemo(() => validateDraft(draft, byId), [draft, byId]);
   const remaining = draft.budget / 10 - validation.totalCost;
+
+  // Resolve the active formation. If the user's choice no longer fits the
+  // current squad (e.g. they swapped a DEF for a MID), fall back to the
+  // largest formation that does.
+  const formation: Formation = useMemo(
+    () => safeFormation(draft, byId, draft.formation as Formation | undefined),
+    [draft, byId],
+  );
+
+  // Starters: respect a manually-set startingXI if it still fits the
+  // formation; otherwise auto-pick by totalPoints.
+  const startingXI = useMemo(() => {
+    if (!byId.size) return new Set<number>();
+    return new Set(pickStartingXI(draft, byId, formation));
+  }, [draft, byId, formation]);
 
   const setPlayerAtSlot = (slot: number, playerId: number | null) => {
     setDraft((d) => {
@@ -173,6 +194,31 @@ export function DraftEditor({ teamId, initial, onClose, onSaved }: Props) {
           </div>
         </div>
 
+        {/* Formation picker */}
+        <div className="flex items-center gap-2 overflow-x-auto border-b bg-background/40 px-4 py-2 text-[11px]">
+          <span className="shrink-0 font-semibold uppercase tracking-widest text-muted-foreground">
+            Formation
+          </span>
+          {FORMATIONS.map((f) => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => setDraft((d) => ({ ...d, formation: f }))}
+              className={cn(
+                "shrink-0 rounded-full border px-2.5 py-0.5 font-mono transition-colors",
+                formation === f
+                  ? "border-primary bg-primary/15 text-primary"
+                  : "border-border bg-card/40 text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {f}
+            </button>
+          ))}
+          <span className="ml-auto shrink-0 text-muted-foreground">
+            Starting XI auto-picked by total points · bench dimmed
+          </span>
+        </div>
+
         {/* Budget meter */}
         <div className="border-b bg-card/60 px-4 py-2 text-xs">
           <div className="mb-1 flex items-center justify-between">
@@ -209,17 +255,24 @@ export function DraftEditor({ teamId, initial, onClose, onSaved }: Props) {
                   const isCaptain = id != null && draft.captainId === id;
                   const isVice = id != null && draft.viceId === id;
                   const isHovered = hoverInfo.id === id && id != null;
+                  const isBench = id != null && !startingXI.has(id);
                   return (
                     <div
                       key={slotIdx}
                       className={cn(
                         "relative flex flex-col items-center gap-1 rounded-lg border bg-card p-2 transition-all",
-                        isCaptain && "ring-2 ring-amber-400",
-                        isVice && !isCaptain && "ring-1 ring-slate-300",
-                        isHovered && hoverInfo.label === "C" && "scale-105 ring-2 ring-amber-300",
-                        isHovered && hoverInfo.label === "V" && "scale-105 ring-2 ring-slate-200",
+                        isBench && "opacity-50",
+                        isCaptain && "opacity-100 ring-2 ring-amber-400",
+                        isVice && !isCaptain && "opacity-100 ring-1 ring-slate-300",
+                        isHovered && hoverInfo.label === "C" && "scale-105 opacity-100 ring-2 ring-amber-300",
+                        isHovered && hoverInfo.label === "V" && "scale-105 opacity-100 ring-2 ring-slate-200",
                       )}
                     >
+                      {isBench && (
+                        <span className="absolute left-1 top-1 rounded-sm bg-white/10 px-1 text-[8px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          Bench
+                        </span>
+                      )}
                       {p ? (
                         <>
                           <div
