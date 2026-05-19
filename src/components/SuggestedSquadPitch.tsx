@@ -29,11 +29,26 @@ interface SuggestedSquad {
   formation: string;
 }
 
+/** Tells the tile what to print in its second/third lines.
+ *  - "fixture": opponent abbreviation + xP (Suggested Squad default)
+ *  - "price":   team abbreviation + £price (Drafts mode) */
+export type BottomMode = "fixture" | "price";
+
 interface Props {
   suggested: SuggestedSquad;
   onTileClick?: (playerId: number, webName: string) => void;
   /** Used to label the header (e.g. "GW 37"). Defaults to no GW label. */
   gw?: number;
+  /** Hide the built-in stats header — useful when the parent has its own. */
+  hideHeader?: boolean;
+  /** Switch the tile bottom-label scheme. Defaults to "fixture". */
+  bottomMode?: BottomMode;
+  /** If provided, called for each tile with the DOM node. Used by the
+   *  magnetic captain-drag system to register snap targets. */
+  registerAnchor?: (playerId: number, el: HTMLElement | null) => void;
+  /** If provided, called for each tile to determine a transient highlight
+   *  (e.g. while a captain/vice badge is hovering this player). */
+  highlight?: (playerId: number) => "captain" | "vice" | null;
 }
 
 const KIT_BASE = "https://fantasy.premierleague.com/dist/img/shirts/standard";
@@ -42,7 +57,15 @@ function kitUrl(teamCode: number, isGk: boolean): string {
   return `${KIT_BASE}/shirt_${teamCode}${isGk ? "_1" : ""}-66.png`;
 }
 
-export function SuggestedSquadPitch({ suggested, onTileClick, gw }: Props) {
+export function SuggestedSquadPitch({
+  suggested,
+  onTileClick,
+  gw,
+  hideHeader = false,
+  bottomMode = "fixture",
+  registerAnchor,
+  highlight,
+}: Props) {
   const gk = suggested.startingXi.filter((p) => p.elementType === 1);
   const def = suggested.startingXi.filter((p) => p.elementType === 2);
   const mid = suggested.startingXi.filter((p) => p.elementType === 3);
@@ -50,13 +73,15 @@ export function SuggestedSquadPitch({ suggested, onTileClick, gw }: Props) {
 
   return (
     <div className="space-y-2">
-      <Header
-        gw={gw}
-        totalXp={suggested.totalXp}
-        bank={suggested.bank}
-        freeTransfers={suggested.freeTransfers}
-        formation={suggested.formation}
-      />
+      {!hideHeader && (
+        <Header
+          gw={gw}
+          totalXp={suggested.totalXp}
+          bank={suggested.bank}
+          freeTransfers={suggested.freeTransfers}
+          formation={suggested.formation}
+        />
+      )}
 
       <div
         className="relative overflow-hidden rounded-2xl border"
@@ -68,14 +93,14 @@ export function SuggestedSquadPitch({ suggested, onTileClick, gw }: Props) {
         <PitchLines />
 
         <div className="relative flex flex-col gap-3 px-1 py-4 sm:gap-4 sm:px-2 sm:py-5">
-          <Row players={gk} onTileClick={onTileClick} />
-          <Row players={def} onTileClick={onTileClick} />
-          <Row players={mid} onTileClick={onTileClick} />
-          <Row players={fwd} onTileClick={onTileClick} />
+          <Row players={gk} onTileClick={onTileClick} bottomMode={bottomMode} registerAnchor={registerAnchor} highlight={highlight} />
+          <Row players={def} onTileClick={onTileClick} bottomMode={bottomMode} registerAnchor={registerAnchor} highlight={highlight} />
+          <Row players={mid} onTileClick={onTileClick} bottomMode={bottomMode} registerAnchor={registerAnchor} highlight={highlight} />
+          <Row players={fwd} onTileClick={onTileClick} bottomMode={bottomMode} registerAnchor={registerAnchor} highlight={highlight} />
         </div>
       </div>
 
-      <BenchStrip bench={suggested.bench} onTileClick={onTileClick} />
+      <BenchStrip bench={suggested.bench} onTileClick={onTileClick} bottomMode={bottomMode} registerAnchor={registerAnchor} highlight={highlight} />
     </div>
   );
 }
@@ -130,48 +155,68 @@ function PitchLines() {
   );
 }
 
-function Row({
-  players,
-  onTileClick,
-}: {
+interface RowProps {
   players: ResolvedPlayer[];
   onTileClick?: (id: number, name: string) => void;
-}) {
+  bottomMode: BottomMode;
+  registerAnchor?: (playerId: number, el: HTMLElement | null) => void;
+  highlight?: (playerId: number) => "captain" | "vice" | null;
+}
+
+function Row({ players, onTileClick, bottomMode, registerAnchor, highlight }: RowProps) {
   if (players.length === 0) return null;
   return (
     <div className="flex w-full justify-around gap-0.5 sm:gap-1.5">
       {players.map((p, i) => (
-        <Tile key={`${p.playerId}-${i}`} player={p} onClick={onTileClick} />
+        <Tile
+          key={`${p.playerId}-${i}`}
+          player={p}
+          onClick={onTileClick}
+          bottomMode={bottomMode}
+          registerAnchor={registerAnchor}
+          highlight={highlight?.(p.playerId) ?? null}
+        />
       ))}
     </div>
   );
 }
 
-function Tile({
-  player,
-  onClick,
-  small = false,
-}: {
+interface TileProps {
   player: ResolvedPlayer;
   onClick?: (id: number, name: string) => void;
   small?: boolean;
-}) {
+  bottomMode: BottomMode;
+  registerAnchor?: (playerId: number, el: HTMLElement | null) => void;
+  highlight?: "captain" | "vice" | null;
+}
+
+function Tile({ player, onClick, small = false, bottomMode, registerAnchor, highlight }: TileProps) {
   const isGk = player.elementType === 1;
   const [imgFailed, setImgFailed] = useState(false);
   const clickable = !!onClick && player.playerId > 0;
   const Tag = clickable ? "button" : "div";
+  const hoverGold = highlight === "captain";
+  const hoverSilver = highlight === "vice";
   return (
     <Tag
       type={clickable ? "button" : undefined}
       onClick={clickable ? () => onClick!(player.playerId, player.webName) : undefined}
-      title={clickable ? `What if you swapped ${player.webName}?` : player.webName}
+      title={clickable ? player.webName : player.webName}
       className={cn(
-        "relative flex min-w-0 flex-1 basis-0 flex-col items-center gap-0.5",
+        "relative flex min-w-0 flex-1 basis-0 flex-col items-center gap-0.5 rounded-md transition-all",
         small ? "max-w-[78px]" : "max-w-[88px]",
-        clickable && "cursor-pointer transition-transform hover:scale-[1.03] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white",
+        clickable && "cursor-pointer hover:scale-[1.05] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white",
+        hoverGold && "scale-[1.08] ring-2 ring-amber-300",
+        hoverSilver && "scale-[1.08] ring-2 ring-slate-200",
       )}
     >
-      <div className="relative h-9 w-9 sm:h-11 sm:w-11">
+      <div
+        ref={(el) => {
+          if (!registerAnchor) return;
+          registerAnchor(player.playerId, el);
+        }}
+        className="relative h-9 w-9 sm:h-11 sm:w-11"
+      >
         {imgFailed || player.teamCode === 0 ? (
           <div
             className="flex h-full w-full items-center justify-center rounded-md bg-white/85 text-[10px] font-bold text-slate-900"
@@ -210,12 +255,25 @@ function Tile({
         <div className={cn("truncate font-semibold text-slate-900", small ? "text-[10px]" : "text-[11px]")}>
           {player.webName}
         </div>
-        <div className={cn("truncate text-slate-600", small ? "text-[9px]" : "text-[9px] sm:text-[10px]")}>
-          {player.opponent ?? "BLANK"}
-        </div>
-        <div className={cn("font-mono font-semibold text-emerald-700", small ? "text-[10px]" : "text-[10px] sm:text-[11px]")}>
-          {player.xPoints.toFixed(1)} xP
-        </div>
+        {bottomMode === "price" ? (
+          <>
+            <div className={cn("truncate text-slate-600", small ? "text-[9px]" : "text-[9px] sm:text-[10px]")}>
+              {player.teamShort}
+            </div>
+            <div className={cn("font-mono font-semibold text-emerald-700", small ? "text-[10px]" : "text-[10px] sm:text-[11px]")}>
+              £{(player.cost / 10).toFixed(1)}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className={cn("truncate text-slate-600", small ? "text-[9px]" : "text-[9px] sm:text-[10px]")}>
+              {player.opponent ?? "BLANK"}
+            </div>
+            <div className={cn("font-mono font-semibold text-emerald-700", small ? "text-[10px]" : "text-[10px] sm:text-[11px]")}>
+              {player.xPoints.toFixed(1)} xP
+            </div>
+          </>
+        )}
       </div>
       {player.isIn && (
         <span className="absolute -left-1 top-0 rounded bg-emerald-500 px-1 py-0.5 text-[8px] font-bold text-white shadow">
@@ -226,13 +284,15 @@ function Tile({
   );
 }
 
-function BenchStrip({
-  bench,
-  onTileClick,
-}: {
+interface BenchProps {
   bench: ResolvedPlayer[];
   onTileClick?: (id: number, name: string) => void;
-}) {
+  bottomMode: BottomMode;
+  registerAnchor?: (playerId: number, el: HTMLElement | null) => void;
+  highlight?: (playerId: number) => "captain" | "vice" | null;
+}
+
+function BenchStrip({ bench, onTileClick, bottomMode, registerAnchor, highlight }: BenchProps) {
   if (!bench || bench.length === 0) return null;
   // Outfield numbered 1.., GK gets the GKP label (autosub last).
   let outfieldNum = 0;
@@ -250,7 +310,14 @@ function BenchStrip({
         {bench.map((p, i) => (
           <div key={`${p.playerId}-${i}`} className="flex min-w-0 flex-1 basis-0 max-w-[88px] flex-col items-center gap-1">
             <div className="text-[9px] font-semibold uppercase text-muted-foreground">{labels[i]}</div>
-            <Tile player={p} onClick={onTileClick} small />
+            <Tile
+              player={p}
+              onClick={onTileClick}
+              small
+              bottomMode={bottomMode}
+              registerAnchor={registerAnchor}
+              highlight={highlight?.(p.playerId) ?? null}
+            />
           </div>
         ))}
       </div>
