@@ -76,7 +76,7 @@ export function DraftEditor({ teamId, initial, onClose, onSaved }: Props) {
   };
 
   const share = async () => {
-    const url = `${window.location.origin}/api/og/draft?d=${encodeDraft(draft)}`;
+    const url = `${window.location.origin}/draft/${encodeDraft(draft)}`;
     const title = `${draft.name} — FPL draft`;
     if (navigator.share) {
       try {

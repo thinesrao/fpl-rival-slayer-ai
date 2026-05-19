@@ -53,7 +53,7 @@ export function DraftsPanel({ teamId }: Props) {
   };
 
   const handleShare = async (d: SquadDraft) => {
-    const url = `${window.location.origin}/api/og/draft?d=${encodeDraft(d)}`;
+    const url = `${window.location.origin}/draft/${encodeDraft(d)}`;
     if (navigator.share) {
       try { await navigator.share({ title: `${d.name} — FPL draft`, url }); return; }
       catch (e) { if ((e as Error).name === "AbortError") return; }
