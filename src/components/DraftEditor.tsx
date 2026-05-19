@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, Plus, Share2, Trash2, X } from "lucide-react";
+import { Check, Loader2, Plus, Share2, Sparkles, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PlayerPhoto } from "@/components/PlayerPhoto";
@@ -32,6 +32,8 @@ export function DraftEditor({ teamId, initial, onClose, onSaved }: Props) {
   const [draft, setDraft] = useState<SquadDraft>(initial);
   const [pickerSlot, setPickerSlot] = useState<number | null>(null);
   const [hoverInfo, setHoverInfo] = useState<{ id: number | null; label: string }>({ id: null, label: "" });
+  const [critique, setCritique] = useState<string | null>(null);
+  const [critiqueLoading, setCritiqueLoading] = useState(false);
 
   // DOM anchors keyed by player id — populated by the slot tiles.
   const anchorRefs = useRef<Map<number, HTMLElement>>(new Map());
@@ -94,6 +96,30 @@ export function DraftEditor({ teamId, initial, onClose, onSaved }: Props) {
   const save = () => {
     upsertDraft(teamId, draft);
     onSaved(draft);
+  };
+
+  const runCritique = async () => {
+    setCritiqueLoading(true);
+    setCritique(null);
+    try {
+      const res = await fetch("/api/drafts/critique", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ encoded: encodeDraft(draft) }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        const msg = body?.message || body?.error || "Critique failed";
+        toast.error(msg);
+        setCritique(null);
+        return;
+      }
+      setCritique(body.markdown as string);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setCritiqueLoading(false);
+    }
   };
 
   const share = async () => {
@@ -350,7 +376,12 @@ export function DraftEditor({ teamId, initial, onClose, onSaved }: Props) {
               ))}
             </ul>
           )}
-          <div className="flex items-center justify-between gap-2">
+          {critique && (
+            <div className="mb-2 max-h-60 overflow-y-auto whitespace-pre-wrap rounded-md border border-violet-500/30 bg-violet-500/5 p-3 text-[11px] leading-relaxed">
+              {critique}
+            </div>
+          )}
+          <div className="flex flex-wrap items-center justify-between gap-2">
             {validation.ok ? (
               <Badge variant="success" className="gap-1">
                 <Check className="h-3 w-3" /> Valid squad
@@ -358,8 +389,22 @@ export function DraftEditor({ teamId, initial, onClose, onSaved }: Props) {
             ) : (
               <Badge variant="outline" className="text-muted-foreground">Draft (incomplete)</Badge>
             )}
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={runCritique}
+                disabled={critiqueLoading || validation.filled < 11}
+                title={validation.filled < 11 ? "Fill at least 11 slots first" : "Get an AI verdict on this draft"}
+              >
+                {critiqueLoading ? (
+                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="mr-1 h-3.5 w-3.5 text-violet-300" />
+                )}
+                {critiqueLoading ? "Thinking…" : critique ? "Re-roast" : "Roast my draft"}
+              </Button>
               <Button variant="outline" size="sm" onClick={share} disabled={validation.filled === 0}>
                 <Share2 className="mr-1 h-3.5 w-3.5" /> Share
               </Button>
