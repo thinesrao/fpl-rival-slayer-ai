@@ -24,6 +24,7 @@ import { BottomNav, type TabId } from "@/components/BottomNav";
 import { FloatingChat } from "@/components/FloatingChat";
 import { FlipCard } from "@/components/FlipCard";
 import { Odometer } from "@/components/Odometer";
+import { DraftsPanel } from "@/components/DraftsPanel";
 import { IntelPanel } from "@/components/IntelPanel";
 import { RetrospectivePanel } from "@/components/RetrospectivePanel";
 import { LivePanel } from "@/components/LivePanel";
@@ -348,6 +349,7 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
               { id: "outlook", label: "Outlook" },
               { id: "projections", label: "Projections" },
               { id: "suggested", label: "Suggested" },
+              { id: "drafts", label: "Drafts" },
               { id: "chips", label: "Chips" },
             ]}
           />
@@ -428,6 +430,11 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
                 </CardContent>
               </Card>
             )}
+          </section>
+
+          <section id="drafts" className="space-y-2 scroll-mt-20">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Squad drafts</h2>
+            <DraftsPanel teamId={teamId} />
           </section>
 
           <section id="chips" className="space-y-2 scroll-mt-20">
