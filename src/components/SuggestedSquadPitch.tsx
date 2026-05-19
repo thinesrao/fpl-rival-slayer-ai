@@ -258,7 +258,7 @@ function Tile({ player, onClick, small = false, bottomMode, registerAnchor, high
         {bottomMode === "price" ? (
           <>
             <div className={cn("truncate text-slate-600", small ? "text-[9px]" : "text-[9px] sm:text-[10px]")}>
-              {player.teamShort}
+              {player.opponent ?? player.teamShort}
             </div>
             <div className={cn("font-mono font-semibold text-emerald-700", small ? "text-[10px]" : "text-[10px] sm:text-[11px]")}>
               £{(player.cost / 10).toFixed(1)}

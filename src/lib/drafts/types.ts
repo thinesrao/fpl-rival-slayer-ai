@@ -34,6 +34,8 @@ export interface PickerPlayer {
   selectedByPct: number;
   status: string;
   news?: string;
+  /** Next-GW opponent label (e.g. "MUN (H)"). null on a blank GW. */
+  nextOpponent?: string | null;
 }
 
 /** FPL squad shape: 2 GK, 5 DEF, 5 MID, 3 FWD = 15. */
