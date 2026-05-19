@@ -47,27 +47,34 @@ export async function GET(req: NextRequest) {
       getEntryHistory(teamId),
     ]);
 
-    // Bank + squad value: prefer entry.last_deadline_bank /
-    // entry.last_deadline_value because those are the EXACT same numbers
-    // the FPL app shows on the Transfers screen (deadline-locked, in
-    // tenths of millions). history.current[N].bank / .value can drift
-    // because that row reflects end-of-GW state including price-change
-    // adjustments that aren't realised into the user's account until the
-    // next deadline. Fall back to history if the entry fields are null
-    // (rare; happens for brand-new entries pre first-deadline).
+    const all = [...squad.starters, ...squad.bench];
+
+    // Squad value = sum of current now_cost across the 15 picks. This
+    // matches the FPL app's "Squad Value" display (modulo selling-price
+    // half-rise rounding, which is at most a few tenths). Bank comes
+    // straight from entry.last_deadline_bank since that's exactly what
+    // the FPL app reads. Cap = bank + squad_value (the real spendable
+    // budget if you sold everyone at now_cost).
+    //
+    // We deliberately DON'T use entry.last_deadline_value as the cap
+    // because that field stores sum(purchase prices) + bank — locked at
+    // last deadline. If a player's now_cost dropped since purchase, the
+    // cap would over-report by the drop amount and the implied bank
+    // (cap − current squad value) would be too high. Issue surfaced
+    // for team 942359: API value=£100.1m, true cap=£99.9m, drift
+    // matched two £0.1m price drops since purchase.
+    const nowCostById = new Map(bs.elements.map((e) => [e.id, e.now_cost]));
+    const squadValue = all.reduce((s, p) => s + (nowCostById.get(p.playerId) ?? 0), 0);
+
     let bank: number;
-    let squadValue: number;
-    if (entry.last_deadline_bank != null && entry.last_deadline_value != null) {
+    if (entry.last_deadline_bank != null) {
       bank = entry.last_deadline_bank;
-      squadValue = entry.last_deadline_value - entry.last_deadline_bank;
     } else {
       const finished = history.current.filter((c) => c.event <= targetGw);
       const lastRow = finished[finished.length - 1] ?? null;
       bank = lastRow?.bank ?? 0;
-      squadValue = lastRow ? lastRow.value - lastRow.bank : 0;
     }
-
-    const all = [...squad.starters, ...squad.bench];
+    const cap = bank + squadValue;
 
     // Order picks slot-by-slot to match SquadDraft.picks contract:
     // GK1, GK2, DEF1..5, MID1..5, FWD1..3.
@@ -111,7 +118,7 @@ export async function GET(req: NextRequest) {
       gw: targetGw,
       bank,
       squadValue,
-      budget: bank + squadValue,
+      budget: cap,
       picks,
       captainId: captain?.playerId ?? null,
       viceId: vice?.playerId ?? null,
