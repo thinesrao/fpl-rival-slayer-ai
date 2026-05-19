@@ -1,15 +1,41 @@
-// Compact URL-safe encoding for a SquadDraft. Used by the share-card
-// route so the entire draft round-trips through a single query param
-// — no server-side persistence required.
+// Compact URL-safe encoding for a SquadDraft. Round-trips through a
+// single ?d= / /draft/<x> path segment — no server-side persistence
+// required.
+//
+// Implementation note: must run in BOTH the browser and Node. We
+// detect the environment with `typeof window` rather than trusting
+// `typeof Buffer`, because some browser bundlers polyfill `Buffer`
+// with a shim that does NOT support the 'base64url' encoding name
+// (throws "Unknown encoding: base64url"). Use btoa/atob with the
+// URL-safe substitution in the browser, Node Buffer with
+// 'base64url' on the server.
 
 import type { SquadDraft } from "./types";
 
 interface Encoded {
-  n: string;          // name
-  b: number;          // budget (tenths)
-  p: (number | null)[]; // picks (15)
-  c: number | null;   // captain id
-  v: number | null;   // vice id
+  n: string;
+  b: number;
+  p: (number | null)[];
+  c: number | null;
+  v: number | null;
+}
+
+const isBrowser = () => typeof window !== "undefined";
+
+function toBase64UrlBrowser(json: string): string {
+  // btoa needs Latin-1; round-trip UTF-8 via encodeURIComponent.
+  const bin = unescape(encodeURIComponent(json));
+  return btoa(bin)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+function fromBase64UrlBrowser(s: string): string {
+  const b64 = s.replace(/-/g, "+").replace(/_/g, "/");
+  // Pad to a multiple of 4 — atob requires it.
+  const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+  return decodeURIComponent(escape(atob(padded)));
 }
 
 export function encodeDraft(d: SquadDraft): string {
@@ -21,26 +47,15 @@ export function encodeDraft(d: SquadDraft): string {
     v: d.viceId,
   };
   const json = JSON.stringify(slim);
-  // URL-safe base64. Use Buffer on Node / btoa on the edge.
-  if (typeof Buffer !== "undefined") {
-    return Buffer.from(json, "utf8").toString("base64url");
-  }
-  // Fallback for environments without Buffer.
-  return btoa(unescape(encodeURIComponent(json)))
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
+  if (isBrowser()) return toBase64UrlBrowser(json);
+  return Buffer.from(json, "utf8").toString("base64url");
 }
 
 export function decodeDraft(s: string): Encoded | null {
   try {
-    let json: string;
-    if (typeof Buffer !== "undefined") {
-      json = Buffer.from(s, "base64url").toString("utf8");
-    } else {
-      const b64 = s.replace(/-/g, "+").replace(/_/g, "/");
-      json = decodeURIComponent(escape(atob(b64)));
-    }
+    const json = isBrowser()
+      ? fromBase64UrlBrowser(s)
+      : Buffer.from(s, "base64url").toString("utf8");
     const parsed = JSON.parse(json);
     if (!parsed || !Array.isArray(parsed.p) || parsed.p.length !== 15) return null;
     return parsed as Encoded;
