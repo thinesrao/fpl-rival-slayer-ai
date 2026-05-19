@@ -10,7 +10,7 @@ import {
   getLive,
   getPicks,
 } from "@/lib/fpl/client";
-import { buildRivalContext } from "@/lib/fpl/rivals";
+import { buildFullLeagueContext, buildRivalContext } from "@/lib/fpl/rivals";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +19,7 @@ const Query = z.object({
   teamId: z.coerce.number().int().positive(),
   leagueId: z.coerce.number().int().positive(),
   n: z.coerce.number().int().min(1).max(5).default(3),
+  mode: z.enum(["above", "full"]).default("above"),
   refresh: z.coerce.number().int().min(0).max(1).default(0),
 });
 
@@ -31,7 +32,16 @@ interface ManagerLive {
   played: number;
   toPlay: number;
   playing: number;
-  captain: { name: string | null; points: number; minutes: number; multiplier: number };
+  captain: {
+    name: string | null;
+    /** FPL photo code (different from element id) for rendering profile pic. */
+    code: number | null;
+    elementType: number | null;
+    teamShort: string | null;
+    points: number;
+    minutes: number;
+    multiplier: number;
+  };
   benchPoints: number;
 }
 
@@ -69,8 +79,12 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    const contextPromise =
+      parsed.data.mode === "full"
+        ? buildFullLeagueContext(parsed.data.leagueId, parsed.data.teamId)
+        : buildRivalContext(parsed.data.leagueId, parsed.data.teamId, parsed.data.n);
     const [{ context }, live, fixtures] = await Promise.all([
-      buildRivalContext(parsed.data.leagueId, parsed.data.teamId, parsed.data.n),
+      contextPromise,
       getLive(cur.id),
       getFixtures(cur.id),
     ]);
@@ -101,6 +115,9 @@ export async function GET(req: NextRequest) {
       let toPlay = 0;
       let playing = 0;
       let captainName: string | null = null;
+      let captainCode: number | null = null;
+      let captainElementType: number | null = null;
+      let captainTeamShort: string | null = null;
       let captainPoints = 0;
       let captainMinutes = 0;
       let captainMultiplier = 0;
@@ -123,6 +140,9 @@ export async function GET(req: NextRequest) {
         }
         if (pick.multiplier >= 2) {
           captainName = slot?.player.web_name ?? null;
+          captainCode = slot?.player.code ?? null;
+          captainElementType = slot?.player.element_type ?? null;
+          captainTeamShort = slot?.team.short_name ?? null;
           captainPoints = pts * pick.multiplier;
           captainMinutes = minutes;
           captainMultiplier = pick.multiplier;
@@ -139,7 +159,15 @@ export async function GET(req: NextRequest) {
         played,
         toPlay,
         playing,
-        captain: { name: captainName, points: captainPoints, minutes: captainMinutes, multiplier: captainMultiplier },
+        captain: {
+          name: captainName,
+          code: captainCode,
+          elementType: captainElementType,
+          teamShort: captainTeamShort,
+          points: captainPoints,
+          minutes: captainMinutes,
+          multiplier: captainMultiplier,
+        },
         benchPoints,
       };
     };
@@ -152,6 +180,14 @@ export async function GET(req: NextRequest) {
     const allFixturesDone = fixtures.length > 0 && fixtures.every((fx) => fx.finished);
     const status: LiveStatus = allFixturesDone || cur.finished ? "finished" : "live";
 
+    // Headline rivals = the 3 managers immediately above the user in mini-league
+    // rank. Used by the UI to give those rows a distinctive highlight.
+    const headlineRivalIds = rivalsLive
+      .filter((r) => r.rank < userLive.rank)
+      .sort((a, b) => b.rank - a.rank) // closest first (largest rank that is still < user.rank)
+      .slice(0, 3)
+      .map((r) => r.entryId);
+
     return NextResponse.json({
       gw: cur.id,
       status,
@@ -162,6 +198,7 @@ export async function GET(req: NextRequest) {
       leagueName: context.leagueName,
       user: userLive,
       rivals: rivalsLive,
+      headlineRivalIds,
     });
   } catch (err) {
     if (err instanceof FplError) {

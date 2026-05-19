@@ -1,14 +1,16 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Crown, Radio } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Activity, ChevronDown, ChevronUp, Crown, Radio, Target } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
+import { PlayerPhoto } from "@/components/PlayerPhoto";
 import { cn } from "@/lib/utils";
 
 interface ManagerLive {
@@ -20,7 +22,15 @@ interface ManagerLive {
   played: number;
   toPlay: number;
   playing: number;
-  captain: { name: string | null; points: number; minutes: number; multiplier: number };
+  captain: {
+    name: string | null;
+    code: number | null;
+    elementType: number | null;
+    teamShort: string | null;
+    points: number;
+    minutes: number;
+    multiplier: number;
+  };
   benchPoints: number;
 }
 
@@ -36,6 +46,7 @@ interface LiveResponse {
   leagueName: string;
   user: ManagerLive | null;
   rivals: ManagerLive[];
+  headlineRivalIds: number[];
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -55,18 +66,21 @@ interface Props {
 
 export function LivePanel({ teamId, leagueId, refreshSignal = 0 }: Props) {
   const bustNextRef = useRef(false);
+  const [collapsed, setCollapsed] = useState(false);
+
   const q = useQuery({
-    queryKey: ["live", teamId, leagueId],
+    queryKey: ["live-full", teamId, leagueId],
     queryFn: () => {
       const refresh = bustNextRef.current ? "&refresh=1" : "";
       bustNextRef.current = false;
-      return fetchJson<LiveResponse>(`/api/live?teamId=${teamId}&leagueId=${leagueId}${refresh}`);
+      return fetchJson<LiveResponse>(
+        `/api/live?teamId=${teamId}&leagueId=${leagueId}&mode=full${refresh}`,
+      );
     },
     refetchInterval: 60_000,
     retry: 0,
   });
 
-  // External "Refresh" click bumps refreshSignal — refetch with cache-bust.
   useEffect(() => {
     if (refreshSignal > 0) {
       bustNextRef.current = true;
@@ -75,11 +89,16 @@ export function LivePanel({ teamId, leagueId, refreshSignal = 0 }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshSignal]);
 
+  const rows = useMemo(() => {
+    if (!q.data?.user) return [];
+    return [q.data.user, ...q.data.rivals].sort((a, b) => b.liveScore - a.liveScore);
+  }, [q.data]);
+
   if (q.isLoading) return <Skeleton className="h-64 w-full" />;
   if (q.error) {
     return (
       <Alert variant="destructive">
-        <AlertTitle>Couldn’t load live data</AlertTitle>
+        <AlertTitle>Couldn&apos;t load live data</AlertTitle>
         <AlertDescription>{(q.error as Error).message}</AlertDescription>
       </Alert>
     );
@@ -92,130 +111,303 @@ export function LivePanel({ teamId, leagueId, refreshSignal = 0 }: Props) {
         <Radio className="h-4 w-4" />
         <AlertTitle>No live gameweek</AlertTitle>
         <AlertDescription>
-          GW {data.gw} hasn’t kicked off yet. The live tracker shows scores once the deadline passes.
+          GW {data.gw} hasn&apos;t kicked off yet. The live tracker shows scores once the deadline passes.
         </AlertDescription>
       </Alert>
     );
   }
 
   const user = data.user;
-  const rows = [user, ...data.rivals].sort((a, b) => b.liveScore - a.liveScore);
+  const headlineIds = new Set(data.headlineRivalIds);
   const isFinished = data.status === "finished";
+
+  // Collapsed view shows you + 3 headline rivals + 2 above/below; expanded shows all.
+  const visibleRows = collapsed
+    ? rows.filter((m) => m.entryId === user.entryId || headlineIds.has(m.entryId))
+    : rows;
+
+  const userPositionInRows = rows.findIndex((r) => r.entryId === user.entryId);
+  const leader = rows[0];
 
   return (
     <div className="space-y-4">
-      <div
+      {/* Status strip */}
+      <motion.div
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
         className={cn(
           "flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 text-xs",
-          isFinished ? "bg-muted/40" : "bg-success/10",
+          isFinished ? "bg-muted/40" : "bg-emerald-500/10 border-emerald-500/30",
         )}
       >
-        <Activity
-          className={cn(
-            "h-3.5 w-3.5",
-            isFinished ? "text-muted-foreground" : "text-success animate-pulse",
-          )}
-        />
+        <span className="relative flex h-2 w-2">
+          <motion.span
+            animate={!isFinished ? { scale: [1, 2, 1], opacity: [0.6, 0, 0.6] } : {}}
+            transition={{ duration: 2, repeat: Infinity }}
+            className={cn(
+              "absolute inset-0 rounded-full",
+              isFinished ? "bg-muted-foreground/40" : "bg-emerald-400",
+            )}
+          />
+          <span className={cn(
+            "relative h-2 w-2 rounded-full",
+            isFinished ? "bg-muted-foreground" : "bg-emerald-400",
+          )} />
+        </span>
+        <Activity className="h-3.5 w-3.5" />
         <span className="font-medium">{isFinished ? "FINAL" : "LIVE"}</span>
         <span className="text-muted-foreground">
-          GW {data.gw} ·{" "}
+          GW {data.gw} · {data.leagueName} ·{" "}
           {isFinished
             ? data.bonusConfirmed
               ? "all matches done, bonus confirmed"
               : "all matches done, bonus pending"
             : "auto-refreshes every 60s"}
         </span>
+        <span className="ml-auto font-mono text-[11px] text-muted-foreground">
+          {rows.length} managers
+        </span>
+      </motion.div>
+
+      {/* Headline summary */}
+      <div className="grid grid-cols-3 gap-2 text-center">
+        <SummaryStat
+          label="Your live rank"
+          value={`${userPositionInRows + 1}`}
+          accent={userPositionInRows === 0 ? "emerald" : userPositionInRows <= 2 ? "amber" : "default"}
+          delay={0}
+        />
+        <SummaryStat
+          label="Leader has"
+          value={`${leader.liveScore}`}
+          subtitle={leader.entryId === user.entryId ? "(you)" : leader.managerName}
+          delay={0.05}
+        />
+        <SummaryStat
+          label="Pts behind leader"
+          value={leader.liveScore - user.liveScore}
+          accent={leader.entryId === user.entryId ? "emerald" : leader.liveScore - user.liveScore <= 5 ? "amber" : "rose"}
+          delay={0.1}
+        />
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">{isFinished ? "Final scoreboard" : "Live scoreboard"}</CardTitle>
-          <CardDescription>
-            {isFinished
-              ? "Final GW points for you and the rivals immediately above."
-              : "Your position right now vs the rivals immediately above."}
-          </CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
+          <div>
+            <CardTitle className="text-base">
+              {isFinished ? "Final scoreboard" : "Live scoreboard"}
+            </CardTitle>
+            <CardDescription>
+              Full mini-league live. <Target className="inline h-3 w-3 text-amber-400" /> marks your{" "}
+              three nearest rivals — pip them to climb a spot.
+            </CardDescription>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setCollapsed((v) => !v)}
+            className="h-7 px-2 text-xs"
+          >
+            {collapsed ? (
+              <>
+                Show all <ChevronDown className="ml-1 h-3 w-3" />
+              </>
+            ) : (
+              <>
+                Collapse <ChevronUp className="ml-1 h-3 w-3" />
+              </>
+            )}
+          </Button>
         </CardHeader>
         <CardContent>
-          <ul className="divide-y overflow-hidden rounded-md border">
+          <motion.ul
+            className="divide-y overflow-hidden rounded-md border"
+            initial={false}
+          >
             <AnimatePresence initial={false}>
-            {rows.map((m, i) => {
-              const isUser = m.entryId === user.entryId;
-              return (
-                <motion.li
-                  key={m.entryId}
-                  layout
-                  transition={{ type: "spring", stiffness: 260, damping: 26 }}
-                  className={cn(
-                    "flex flex-wrap items-center gap-3 px-3 py-3 text-sm",
-                    isUser && "bg-primary/10",
-                  )}
-                >
-                  <span className="w-6 text-center text-xs font-mono text-muted-foreground">#{i + 1}</span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className={cn("truncate font-medium", isUser && "text-primary")}>
-                        {m.name}
+              {visibleRows.map((m, i) => {
+                const isUser = m.entryId === user.entryId;
+                const isHeadline = headlineIds.has(m.entryId);
+                const pos = rows.findIndex((r) => r.entryId === m.entryId) + 1;
+                return (
+                  <motion.li
+                    key={m.entryId}
+                    layout
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 10 }}
+                    transition={{
+                      type: "spring",
+                      stiffness: 280,
+                      damping: 30,
+                      delay: Math.min(i * 0.02, 0.3),
+                    }}
+                    className={cn(
+                      "relative flex flex-wrap items-center gap-3 px-3 py-3 text-sm transition-colors",
+                      isUser && "bg-primary/10",
+                      isHeadline && !isUser && "bg-amber-500/5",
+                    )}
+                  >
+                    {/* Left rank gutter */}
+                    <div className="flex w-8 flex-col items-center">
+                      <span className="text-xs font-mono font-semibold text-muted-foreground">
+                        #{pos}
                       </span>
-                      {isUser && <Badge variant="default" className="px-1.5 py-0 text-[10px] leading-none">YOU</Badge>}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {m.managerName} · rank {m.rank}
-                      {m.captain.name && (
-                        <>
-                          {" · "}
-                          <Crown className="inline h-3 w-3" /> {m.captain.name}{" "}
-                          ({m.captain.points} pts{m.captain.multiplier === 3 ? " ×3" : ""})
-                        </>
+                      {isHeadline && !isUser && (
+                        <Target className="mt-0.5 h-3 w-3 text-amber-400" aria-label="Main rival" />
                       )}
                     </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xl font-bold tabular-nums">
-                      <AnimatedNumber value={m.liveScore} duration={0.6} />
-                    </div>
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                      {m.played} played · {m.playing} live · {m.toPlay} to play
-                    </div>
-                  </div>
-                </motion.li>
-              );
-            })}
-            </AnimatePresence>
-          </ul>
-        </CardContent>
-      </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Captain status</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ul className="grid gap-2 sm:grid-cols-2">
-            {[user, ...data.rivals].map((m) => {
-              const status =
-                m.captain.minutes === 0
-                  ? "yet to play"
-                  : m.captain.minutes < 60
-                  ? `${m.captain.minutes}'`
-                  : "complete";
-              return (
-                <li key={m.entryId} className="flex items-center justify-between rounded-md bg-muted/40 px-3 py-2 text-sm">
-                  <div className="flex min-w-0 flex-col">
-                    <span className="truncate">
-                      <Crown className="mr-1 inline h-3 w-3 text-warning" />
-                      {m.captain.name ?? "—"}{" "}
-                      <span className="text-xs text-muted-foreground">({m.name})</span>
-                    </span>
-                    <span className="text-xs text-muted-foreground">{status}</span>
-                  </div>
-                  <Badge variant={m.captain.points > 0 ? "success" : "outline"}>{m.captain.points} pts</Badge>
-                </li>
-              );
-            })}
-          </ul>
+                    {/* Captain photo */}
+                    <div className="relative shrink-0">
+                      {m.captain.code != null ? (
+                        <PlayerPhoto
+                          code={m.captain.code}
+                          name={m.captain.name ?? "Captain"}
+                          size="sm"
+                          chanceOfPlaying={
+                            m.captain.minutes >= 60 ? 100 : m.captain.minutes > 0 ? 75 : 50
+                          }
+                        />
+                      ) : (
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-[10px] text-muted-foreground">
+                          —
+                        </div>
+                      )}
+                      {/* Captaincy marker */}
+                      <motion.span
+                        animate={{
+                          rotateY: m.captain.minutes > 0 && !isFinished ? [0, 360] : 0,
+                        }}
+                        transition={{
+                          duration: 4,
+                          repeat: m.captain.minutes > 0 && !isFinished ? Infinity : 0,
+                          ease: "linear",
+                        }}
+                        style={{
+                          background: m.captain.multiplier === 3
+                            ? "linear-gradient(120deg,#a78bfa,#7c3aed)"
+                            : "linear-gradient(120deg,#fde68a 0%,#f59e0b 60%,#fbbf24 100%)",
+                          boxShadow: "0 0 6px rgba(245,158,11,0.5)",
+                        }}
+                        className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold text-amber-950"
+                      >
+                        {m.captain.multiplier === 3 ? "TC" : "C"}
+                      </motion.span>
+                    </div>
+
+                    {/* Manager + captain text */}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={cn(
+                            "truncate font-semibold",
+                            isUser && "text-primary",
+                          )}
+                        >
+                          {m.name}
+                        </span>
+                        {isUser && (
+                          <Badge variant="default" className="px-1.5 py-0 text-[10px] leading-none">
+                            YOU
+                          </Badge>
+                        )}
+                        {isHeadline && !isUser && (
+                          <Badge variant="outline" className="border-amber-500/40 px-1.5 py-0 text-[10px] leading-none text-amber-300">
+                            Rival
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
+                        <span>{m.managerName} · rank {m.rank.toLocaleString()}</span>
+                        {m.captain.name && (
+                          <span className="inline-flex items-center gap-1">
+                            <Crown className="h-3 w-3 text-amber-400" />
+                            {m.captain.name}
+                            {m.captain.teamShort && (
+                              <span className="rounded bg-white/5 px-1 text-[9px] font-mono uppercase">
+                                {m.captain.teamShort}
+                              </span>
+                            )}
+                            <span className="font-mono">
+                              {m.captain.points} pt{m.captain.points === 1 ? "" : "s"}
+                              {m.captain.multiplier === 3 ? " (×3)" : ""}
+                            </span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Score */}
+                    <div className="text-right">
+                      <div
+                        className={cn(
+                          "text-2xl font-bold tabular-nums leading-none",
+                          isUser && "text-primary",
+                        )}
+                      >
+                        <AnimatedNumber value={m.liveScore} duration={0.6} />
+                      </div>
+                      <div className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                        {m.played}p · {m.playing}l · {m.toPlay}t
+                      </div>
+                    </div>
+
+                    {/* Subtle right edge accent for the user */}
+                    {isUser && (
+                      <motion.span
+                        layoutId="user-row-accent"
+                        className="absolute inset-y-0 right-0 w-1 bg-primary"
+                      />
+                    )}
+                  </motion.li>
+                );
+              })}
+            </AnimatePresence>
+          </motion.ul>
+          {collapsed && rows.length > visibleRows.length && (
+            <div className="mt-2 text-center text-[11px] text-muted-foreground">
+              {rows.length - visibleRows.length} more managers hidden — tap{" "}
+              <span className="font-semibold">Show all</span> above.
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+interface SummaryStatProps {
+  label: string;
+  value: string | number;
+  subtitle?: string;
+  accent?: "default" | "emerald" | "amber" | "rose";
+  delay?: number;
+}
+
+function SummaryStat({ label, value, subtitle, accent = "default", delay = 0 }: SummaryStatProps) {
+  const colorClasses: Record<NonNullable<SummaryStatProps["accent"]>, string> = {
+    default: "border-border bg-card",
+    emerald: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
+    amber: "border-amber-500/40 bg-amber-500/10 text-amber-200",
+    rose: "border-rose-500/40 bg-rose-500/10 text-rose-300",
+  };
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay, type: "spring", stiffness: 280, damping: 26 }}
+      className={cn("rounded-lg border px-3 py-2", colorClasses[accent])}
+    >
+      <div className="text-lg font-bold leading-none tabular-nums">
+        {typeof value === "number" ? <AnimatedNumber value={value} /> : value}
+      </div>
+      <div className="mt-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+        {label}
+      </div>
+      {subtitle && (
+        <div className="truncate text-[10px] text-muted-foreground">{subtitle}</div>
+      )}
+    </motion.div>
   );
 }
