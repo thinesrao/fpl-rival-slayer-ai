@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ClipboardList, Pencil, Plus, Trash2 } from "lucide-react";
+import { ClipboardList, Pencil, Plus, Share2, Trash2 } from "lucide-react";
+import { encodeDraft } from "@/lib/drafts/encode";
+import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -50,6 +52,16 @@ export function DraftsPanel({ teamId }: Props) {
     setDrafts(deleteDraft(teamId, id));
   };
 
+  const handleShare = async (d: SquadDraft) => {
+    const url = `${window.location.origin}/api/og/draft?d=${encodeDraft(d)}`;
+    if (navigator.share) {
+      try { await navigator.share({ title: `${d.name} — FPL draft`, url }); return; }
+      catch (e) { if ((e as Error).name === "AbortError") return; }
+    }
+    try { await navigator.clipboard.writeText(url); toast.success("Link copied"); window.open(url, "_blank", "noopener"); }
+    catch { window.open(url, "_blank", "noopener"); }
+  };
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
@@ -95,6 +107,15 @@ export function DraftsPanel({ teamId }: Props) {
                   <div className="flex gap-1">
                     <Button variant="ghost" size="sm" onClick={() => setEditing(d)} className="h-8 px-2">
                       <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleShare(d)}
+                      aria-label="Share draft"
+                      className="h-8 px-2"
+                    >
+                      <Share2 className="h-3.5 w-3.5" />
                     </Button>
                     <Button
                       variant="ghost"

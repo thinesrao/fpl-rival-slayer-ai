@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, Plus, Trash2, X } from "lucide-react";
+import { Check, Plus, Share2, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PlayerPhoto } from "@/components/PlayerPhoto";
@@ -11,6 +11,8 @@ import { MagneticCaptainBadge } from "@/components/MagneticCaptainBadge";
 import { SLOT_LABELS, SLOTS, type PickerPlayer, type Position, type SquadDraft } from "@/lib/drafts/types";
 import { validateDraft } from "@/lib/drafts/validate";
 import { upsertDraft } from "@/lib/drafts/storage";
+import { encodeDraft } from "@/lib/drafts/encode";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -71,6 +73,26 @@ export function DraftEditor({ teamId, initial, onClose, onSaved }: Props) {
   const save = () => {
     upsertDraft(teamId, draft);
     onSaved(draft);
+  };
+
+  const share = async () => {
+    const url = `${window.location.origin}/api/og/draft?d=${encodeDraft(draft)}`;
+    const title = `${draft.name} — FPL draft`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title, text: title, url });
+        return;
+      } catch (e) {
+        if ((e as Error).name === "AbortError") return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("Share link copied — paste into your group chat.");
+      window.open(url, "_blank", "noopener");
+    } catch {
+      window.open(url, "_blank", "noopener");
+    }
   };
 
   const setCaptain = (playerId: number) => {
@@ -285,6 +307,9 @@ export function DraftEditor({ teamId, initial, onClose, onSaved }: Props) {
             )}
             <div className="flex gap-2">
               <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+              <Button variant="outline" size="sm" onClick={share} disabled={validation.filled === 0}>
+                <Share2 className="mr-1 h-3.5 w-3.5" /> Share
+              </Button>
               <Button size="sm" onClick={save}>Save draft</Button>
             </div>
           </div>

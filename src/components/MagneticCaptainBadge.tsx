@@ -33,8 +33,6 @@ interface Props {
 export function MagneticCaptainBadge({ getAnchors, label, variant, onAssign, snapRadius = 64 }: Props) {
   const slotsRef = useRef<SlotRef[]>([]);
   const [hoverId, setHoverId] = useState<number | null>(null);
-  const x = useRef(0);
-  const y = useRef(0);
 
   const styles = useMemo(() => {
     if (variant === "captain") {
