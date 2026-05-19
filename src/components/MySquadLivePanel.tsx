@@ -423,16 +423,36 @@ function BenchStrip({ bench, onClick }: { bench: LivePlayer[]; onClick: (p: Live
   const inactiveBenchTotal = bench
     .filter((p) => !p.autosubbedIn)
     .reduce((s, p) => s + p.livePoints, 0);
+  // Scale up to a 15-pt "max realistic single-GW bench loss".
+  const meterPct = Math.min(100, (inactiveBenchTotal / 15) * 100);
+  const danger = inactiveBenchTotal >= 10;
   return (
     <div className="overflow-hidden rounded-2xl border bg-muted/40 px-2 py-3">
       <div className="mb-2 flex items-center justify-between px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
         <span>Bench (autosub order)</span>
         {inactiveBenchTotal > 0 && (
-          <span title="Points scored by your bench that didn't count (no autosub).">
-            on bench: <span className="font-mono text-slate-500">{inactiveBenchTotal}</span> pts
-          </span>
+          <motion.span
+            animate={{ scale: danger ? [1, 1.08, 1] : 1 }}
+            transition={{ duration: 0.8, repeat: danger ? Infinity : 0 }}
+            title="Points scored by your bench that didn't count (no autosub)."
+            className={cn("font-mono", danger ? "text-rose-400" : "text-slate-500")}
+          >
+            on bench: {inactiveBenchTotal} pts
+          </motion.span>
         )}
       </div>
+      {inactiveBenchTotal > 0 && (
+        <div className="mb-2 h-1 overflow-hidden rounded-full bg-white/5">
+          <motion.div
+            animate={{
+              width: `${meterPct}%`,
+              boxShadow: danger ? "0 0 8px #fb7185aa" : "0 0 0 transparent",
+            }}
+            transition={{ type: "spring", stiffness: 180, damping: 22 }}
+            className={cn("h-full", danger ? "bg-rose-500" : "bg-slate-500")}
+          />
+        </div>
+      )}
       <div className="flex w-full justify-around gap-0.5 sm:gap-1.5">
         {bench.map((p, i) => (
           <div key={p.playerId} className="flex min-w-0 flex-1 basis-0 max-w-[88px] flex-col items-center gap-1">
