@@ -6,9 +6,11 @@ import { Line, LineChart, ResponsiveContainer, Tooltip as ChartTooltip } from "r
 import { ArrowDown, ArrowUp, ArrowUpFromLine, Radio, RefreshCcw } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { motion } from "framer-motion";
 import { PlayerDetailModal } from "@/components/PlayerDetailModal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
+import { GoalCelebration } from "@/components/GoalCelebration";
 import { useCaptainConfetti } from "@/lib/use-captain-confetti";
 import { cn } from "@/lib/utils";
 
@@ -156,6 +158,10 @@ export function MySquadLivePanel({ teamId, leagueId, refreshSignal = 0 }: Props)
 
   return (
     <Card>
+      <GoalCelebration
+        triggerValue={captain?.pointsWithMultiplier}
+        subtitle={captain ? `${captain.webName} · ×${captain.multiplier}` : undefined}
+      />
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-base">
           <Radio className="h-4 w-4 text-primary" />
@@ -331,7 +337,19 @@ function Tile({ player, onClick, small = false }: { player: LivePlayer; onClick:
           />
         )}
         {player.isCaptain && (
-          <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-amber-400 text-[9px] font-bold text-amber-950 shadow">C</span>
+          <motion.span
+            animate={{ rotateY: 360 }}
+            transition={{ duration: 3.5, ease: "linear", repeat: Infinity }}
+            style={{
+              transformStyle: "preserve-3d",
+              background:
+                "linear-gradient(120deg,#fde68a 0%,#f59e0b 35%,#fbbf24 60%,#f59e0b 100%)",
+              boxShadow: "0 0 10px #f59e0b80, inset 0 0 4px #fff8",
+            }}
+            className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold text-amber-950"
+          >
+            C
+          </motion.span>
         )}
         {!player.isCaptain && player.isVice && (
           <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-slate-200 text-[9px] font-bold text-slate-900 shadow">V</span>
