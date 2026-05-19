@@ -12,6 +12,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { GoalCelebration } from "@/components/GoalCelebration";
 import { StreakBadge } from "@/components/StreakBadge";
+import { PitchTilt } from "@/components/PitchTilt";
+import { PointBubble } from "@/components/PointBubble";
 import { useCaptainConfetti } from "@/lib/use-captain-confetti";
 import { cn } from "@/lib/utils";
 
@@ -177,18 +179,20 @@ export function MySquadLivePanel({ teamId, leagueId, refreshSignal = 0 }: Props)
       <CardContent className="space-y-3">
         <MetricsHeader metrics={data.metrics} />
 
-        <div
-          className="relative overflow-hidden rounded-2xl border"
-          style={{ background: "linear-gradient(to bottom, hsl(120 55% 32%), hsl(120 50% 27%))" }}
-        >
-          <PitchLines />
-          <div className="relative flex flex-col gap-3 px-1 py-4 sm:gap-4 sm:px-2 sm:py-5">
-            <Row players={gk} onClick={onTileClick} />
-            <Row players={def} onClick={onTileClick} />
-            <Row players={mid} onClick={onTileClick} />
-            <Row players={fwd} onClick={onTileClick} />
+        <PitchTilt>
+          <div
+            className="relative overflow-hidden rounded-2xl border"
+            style={{ background: "linear-gradient(to bottom, hsl(120 55% 32%), hsl(120 50% 27%))" }}
+          >
+            <PitchLines />
+            <div className="relative flex flex-col gap-3 px-1 py-4 sm:gap-4 sm:px-2 sm:py-5">
+              <Row players={gk} onClick={onTileClick} />
+              <Row players={def} onClick={onTileClick} />
+              <Row players={mid} onClick={onTileClick} />
+              <Row players={fwd} onClick={onTileClick} />
+            </div>
           </div>
-        </div>
+        </PitchTilt>
 
         <BenchStrip bench={data.bench} onClick={onTileClick} />
       </CardContent>
@@ -324,6 +328,7 @@ function Tile({ player, onClick, small = false }: { player: LivePlayer; onClick:
       )}
     >
       <div className="relative h-9 w-9 sm:h-11 sm:w-11">
+        <PointBubble livePoints={player.livePoints} />
         {imgFailed || player.teamCode === 0 ? (
           <div className="flex h-full w-full items-center justify-center rounded-md bg-white/85 text-[10px] font-bold text-slate-900" aria-hidden>
             {player.teamShort}
