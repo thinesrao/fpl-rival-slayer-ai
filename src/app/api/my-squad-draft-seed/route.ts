@@ -8,6 +8,7 @@ import { z } from "zod";
 import {
   FplError,
   getBootstrap,
+  getEntry,
   getEntryHistory,
   currentEvent,
 } from "@/lib/fpl/client";
@@ -40,18 +41,31 @@ export async function GET(req: NextRequest) {
     const bs = await getBootstrap();
     const current = currentEvent(bs);
     const targetGw = current?.id ?? 1;
-    const [squad, history] = await Promise.all([
+    const [squad, entry, history] = await Promise.all([
       buildMySquadLive(teamId, targetGw),
+      getEntry(teamId),
       getEntryHistory(teamId),
     ]);
 
-    // Bank + squad value: use the most recent finished GW's history row.
-    // FPL stores both in tenths of millions. `value` is full squad value
-    // including bank, so squadValue = value - bank.
-    const finished = history.current.filter((c) => c.event <= targetGw);
-    const lastRow = finished[finished.length - 1] ?? null;
-    const bank = lastRow?.bank ?? 0;
-    const squadValue = lastRow ? lastRow.value - lastRow.bank : 0;
+    // Bank + squad value: prefer entry.last_deadline_bank /
+    // entry.last_deadline_value because those are the EXACT same numbers
+    // the FPL app shows on the Transfers screen (deadline-locked, in
+    // tenths of millions). history.current[N].bank / .value can drift
+    // because that row reflects end-of-GW state including price-change
+    // adjustments that aren't realised into the user's account until the
+    // next deadline. Fall back to history if the entry fields are null
+    // (rare; happens for brand-new entries pre first-deadline).
+    let bank: number;
+    let squadValue: number;
+    if (entry.last_deadline_bank != null && entry.last_deadline_value != null) {
+      bank = entry.last_deadline_bank;
+      squadValue = entry.last_deadline_value - entry.last_deadline_bank;
+    } else {
+      const finished = history.current.filter((c) => c.event <= targetGw);
+      const lastRow = finished[finished.length - 1] ?? null;
+      bank = lastRow?.bank ?? 0;
+      squadValue = lastRow ? lastRow.value - lastRow.bank : 0;
+    }
 
     const all = [...squad.starters, ...squad.bench];
 
