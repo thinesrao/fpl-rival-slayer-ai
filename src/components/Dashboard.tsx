@@ -23,6 +23,7 @@ import { MySquadLivePanel } from "@/components/MySquadLivePanel";
 import { BottomNav, type TabId } from "@/components/BottomNav";
 import { FloatingChat } from "@/components/FloatingChat";
 import { FlipCard } from "@/components/FlipCard";
+import { Odometer } from "@/components/Odometer";
 import { IntelPanel } from "@/components/IntelPanel";
 import { RetrospectivePanel } from "@/components/RetrospectivePanel";
 import { LivePanel } from "@/components/LivePanel";
@@ -257,7 +258,9 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
           <p className="text-xs text-muted-foreground sm:text-sm">
             You: <span className="font-medium text-foreground">{ctx.user.entry.name}</span> · rank{" "}
             <span className="font-medium text-foreground">#{ctx.user.entry.rank}</span> ·{" "}
-            <span className="font-medium text-foreground">{ctx.user.entry.total}</span> pts
+            <span className="inline-flex items-baseline align-baseline font-medium text-foreground">
+              <Odometer value={ctx.user.entry.total} minDigits={4} height={18} />
+            </span> pts
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">

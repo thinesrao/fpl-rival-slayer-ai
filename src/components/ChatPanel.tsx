@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { StreamingText } from "@/components/StreamingText";
+import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -243,9 +245,7 @@ export function ChatPanel({ teamId, leagueId }: Props) {
             messages.map((m, i) => <Bubble key={`${m.ts}-${i}`} msg={m} />)
           )}
           {streaming && streamingText && (
-            <Bubble
-              msg={{ role: "model", text: streamingText + "▍", ts: "streaming" }}
-            />
+            <StreamingBubble text={streamingText} />
           )}
           {streaming && !streamingText && (
             <div className="flex items-center gap-2 rounded-md bg-card/80 p-3 text-xs text-muted-foreground">
@@ -294,6 +294,26 @@ export function ChatPanel({ teamId, leagueId }: Props) {
         </form>
       </CardContent>
     </Card>
+  );
+}
+
+function StreamingBubble({ text }: { text: string }) {
+  return (
+    <div className="flex flex-row gap-2">
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500">
+        <Bot className="h-3.5 w-3.5" />
+      </div>
+      <div className="max-w-[85%] rounded-md border bg-card px-3 py-2 text-sm shadow-sm">
+        <p className="whitespace-pre-wrap leading-relaxed">
+          <StreamingText text={text} />
+          <motion.span
+            animate={{ opacity: [1, 0, 1] }}
+            transition={{ duration: 0.8, repeat: Infinity }}
+            className="ml-0.5 inline-block h-3.5 w-1.5 align-middle bg-emerald-400"
+          />
+        </p>
+      </div>
+    </div>
   );
 }
 
