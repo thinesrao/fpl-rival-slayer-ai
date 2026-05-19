@@ -302,7 +302,7 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
           <TabsTrigger value="matches">Matches</TabsTrigger>
           <TabsTrigger value="rivals">Rivals</TabsTrigger>
           <TabsTrigger value="plan">Plan</TabsTrigger>
-          <TabsTrigger value="history">History</TabsTrigger>
+          <TabsTrigger value="drafts">Drafts</TabsTrigger>
         </TabsList>
 
         <TabsContent value="pitch" className="mt-4 space-y-4">
@@ -350,6 +350,15 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
             </div>
           )}
           <MySquadLivePanel teamId={teamId} leagueId={leagueId} refreshSignal={refreshSignal} />
+
+          <details className="rounded-lg border bg-card/40 group">
+            <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground">
+              Past gameweeks <span className="ml-1 text-[10px] uppercase tracking-widest opacity-60">tap to expand</span>
+            </summary>
+            <div className="border-t p-3 md:p-4">
+              <RetrospectivePanel teamId={teamId} leagueId={leagueId} />
+            </div>
+          </details>
         </TabsContent>
 
         <TabsContent value="plan" className="mt-4 space-y-6">
@@ -358,7 +367,6 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
               { id: "outlook", label: "Outlook" },
               { id: "projections", label: "Projections" },
               { id: "suggested", label: "Suggested" },
-              { id: "drafts", label: "Drafts" },
               { id: "chips", label: "Chips" },
             ]}
           />
@@ -441,11 +449,6 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
             )}
           </section>
 
-          <section id="drafts" className="space-y-2 scroll-mt-20">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Squad drafts</h2>
-            <DraftsPanel teamId={teamId} />
-          </section>
-
           <section id="chips" className="space-y-2 scroll-mt-20">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Chip timing</h2>
             <RivalChipsPanel teamId={teamId} leagueId={leagueId} />
@@ -509,8 +512,8 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
           )}
         </TabsContent>
 
-        <TabsContent value="history" className="mt-4">
-          <RetrospectivePanel teamId={teamId} leagueId={leagueId} />
+        <TabsContent value="drafts" className="mt-4 space-y-4">
+          <DraftsPanel teamId={teamId} />
         </TabsContent>
       </Tabs>
 

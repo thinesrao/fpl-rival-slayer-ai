@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeftRight, ClipboardList, Pencil, Plus, Share2, Trash2 } from "lucide-react";
+import { ArrowLeftRight, ClipboardList, Loader2, Pencil, Plus, Share2, Trash2 } from "lucide-react";
 import { encodeDraft } from "@/lib/drafts/encode";
 import { CompareDrafts } from "@/components/CompareDrafts";
 import { toast } from "sonner";
@@ -14,6 +14,18 @@ import { emptyDraft, type PickerPlayer, type SquadDraft } from "@/lib/drafts/typ
 import { deleteDraft, loadDrafts } from "@/lib/drafts/storage";
 import { validateDraft } from "@/lib/drafts/validate";
 
+interface DraftSeed {
+  gw: number;
+  bank: number;
+  squadValue: number;
+  budget: number;
+  picks: (number | null)[];
+  captainId: number | null;
+  viceId: number | null;
+  startingXI: number[];
+  formation: string;
+}
+
 interface Props {
   teamId: number;
 }
@@ -22,6 +34,7 @@ export function DraftsPanel({ teamId }: Props) {
   const [drafts, setDrafts] = useState<SquadDraft[]>([]);
   const [editing, setEditing] = useState<SquadDraft | null>(null);
   const [comparing, setComparing] = useState(false);
+  const [seedLoading, setSeedLoading] = useState(false);
 
   useEffect(() => {
     setDrafts(loadDrafts(teamId));
@@ -39,9 +52,31 @@ export function DraftsPanel({ teamId }: Props) {
   const byId = new Map<number, PickerPlayer>();
   playersQ.data?.players.forEach((p) => byId.set(p.id, p));
 
-  const createDraft = () => {
-    const next = emptyDraft(`Draft ${String.fromCharCode(65 + drafts.length)}`);
-    setEditing(next);
+  const createDraft = async () => {
+    setSeedLoading(true);
+    try {
+      const res = await fetch(`/api/my-squad-draft-seed?teamId=${teamId}`);
+      const body = await res.json();
+      if (!res.ok) {
+        toast.error(body?.message ?? "Couldn't load your current squad.");
+        // Fall back to an empty draft so the user can still try.
+        setEditing(emptyDraft(`Draft ${String.fromCharCode(65 + drafts.length)}`));
+        return;
+      }
+      const seed = body as DraftSeed;
+      const next = emptyDraft(`GW${seed.gw + 1} draft ${String.fromCharCode(65 + drafts.length)}`);
+      next.budget = seed.budget;
+      next.picks = seed.picks;
+      next.captainId = seed.captainId;
+      next.viceId = seed.viceId;
+      next.startingXI = seed.startingXI;
+      next.formation = seed.formation;
+      setEditing(next);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSeedLoading(false);
+    }
   };
 
   const handleSaved = () => {
@@ -72,7 +107,9 @@ export function DraftsPanel({ teamId }: Props) {
             <ClipboardList className="h-4 w-4 text-primary" /> Squad drafts
           </CardTitle>
           <CardDescription>
-            Sketch alternative XIs within your budget. Saved locally — review across the week, pick one before the deadline.
+            Each new draft starts from your current squad and bank balance. Make transfers, change
+            formation, swap captain — save as many what-if scenarios as you like, then pick one
+            before the deadline.
           </CardDescription>
         </div>
         <div className="flex gap-2">
@@ -81,16 +118,24 @@ export function DraftsPanel({ teamId }: Props) {
               <ArrowLeftRight className="mr-1 h-4 w-4" /> Compare
             </Button>
           )}
-          <Button size="sm" onClick={createDraft}>
-            <Plus className="mr-1 h-4 w-4" /> New draft
+          <Button size="sm" onClick={createDraft} disabled={seedLoading}>
+            {seedLoading ? (
+              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+            ) : (
+              <Plus className="mr-1 h-4 w-4" />
+            )}
+            {seedLoading ? "Loading squad…" : "New draft"}
           </Button>
         </div>
       </CardHeader>
       <CardContent>
         {drafts.length === 0 ? (
-          <p className="rounded-md border border-dashed bg-muted/30 p-4 text-center text-sm text-muted-foreground">
-            No drafts yet. Tap <strong>New draft</strong> to sketch your first squad — no FPL login needed.
-          </p>
+          <div className="rounded-md border border-dashed bg-muted/30 p-6 text-center">
+            <p className="text-sm text-muted-foreground">
+              No drafts yet. Tap <strong>New draft</strong> to clone your current squad and start
+              planning next gameweek.
+            </p>
+          </div>
         ) : (
           <ul className="divide-y rounded-md border">
             {drafts.map((d) => {

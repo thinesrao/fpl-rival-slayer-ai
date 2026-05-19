@@ -2,9 +2,9 @@
 // Squad-draft share card. 1200x630, OG-friendly.
 //   GET /api/og/draft?d=<base64-url-encoded SquadDraft>
 //
-// Pure server render: decodes the draft from the URL, joins against
-// bootstrap-static for player metadata, and lays out a quick at-a-
-// glance card the user can drop into a group chat.
+// Satori is strict — every <div> with multiple children must have
+// display: flex (or display: none). Every container below is
+// explicit. Strings are kept as a single text node per element.
 
 import { ImageResponse } from "next/og";
 import type { NextRequest } from "next/server";
@@ -42,17 +42,21 @@ export async function GET(req: NextRequest) {
   const totalCost = totalCostTenths / 10;
   const budget = draft.b / 10;
   const inBudget = totalCost <= budget;
-
   const captain = draft.c != null ? byId.get(draft.c) : null;
   const vice = draft.v != null ? byId.get(draft.v) : null;
 
-  // Group picks by position for layout.
   const byPos: Record<number, number[]> = { 1: [], 2: [], 3: [], 4: [] };
   for (const id of draft.p) {
     if (id == null) continue;
     const e = byId.get(id);
     if (e) byPos[e.element_type].push(id);
   }
+
+  const statusText =
+    filled === 15 && inBudget ? "Valid · 15/15" : `${filled}/15 · £${totalCost.toFixed(1)}m`;
+  const statusColor = inBudget ? EMERALD : ROSE;
+  const captainLine = `Captain: ${captain?.web_name ?? "—"}  ·  Vice: ${vice?.web_name ?? "—"}`;
+  const budgetLine = `£${totalCost.toFixed(1)}m of £${budget.toFixed(1)}m`;
 
   return new ImageResponse(
     (
@@ -68,68 +72,107 @@ export async function GET(req: NextRequest) {
           fontFamily: "system-ui, sans-serif",
         }}
       >
-        {/* Header strip */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        {/* Header row */}
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center" }}>
             <div
               style={{
-                width: 40,
-                height: 40,
+                width: 44,
+                height: 44,
                 borderRadius: 10,
                 background: EMERALD,
                 color: "#fff",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                fontSize: 22,
+                fontSize: 24,
+                marginRight: 14,
               }}
             >
               ⚔
             </div>
             <div style={{ display: "flex", flexDirection: "column" }}>
-              <div style={{ fontSize: 18, fontWeight: 600 }}>Rival Slayer · draft</div>
-              <div style={{ fontSize: 12, color: MUTED }}>fpl-rival-slayer-ai.vercel.app</div>
+              <div style={{ fontSize: 20, fontWeight: 700 }}>Rival Slayer · draft</div>
+              <div style={{ fontSize: 12, color: MUTED }}>fpl-rival-slayer-ai</div>
             </div>
           </div>
           <div
             style={{
-              padding: "6px 14px",
+              display: "flex",
+              padding: "8px 16px",
               borderRadius: 999,
-              background: inBudget ? `${EMERALD}22` : `${ROSE}22`,
-              border: `1px solid ${inBudget ? EMERALD : ROSE}66`,
-              fontSize: 14,
-              fontWeight: 600,
-              color: inBudget ? EMERALD : ROSE,
+              background: `${statusColor}22`,
+              border: `1px solid ${statusColor}66`,
+              fontSize: 16,
+              fontWeight: 700,
+              color: statusColor,
             }}
           >
-            {filled === 15 && inBudget ? "Valid · 15/15" : `${filled}/15 · £${totalCost.toFixed(1)}m`}
+            {statusText}
           </div>
         </div>
 
-        {/* Draft name + budget */}
-        <div style={{ marginTop: 22, display: "flex", flexDirection: "column" }}>
-          <div style={{ fontSize: 14, color: MUTED, letterSpacing: 2, textTransform: "uppercase" }}>
+        {/* Title block */}
+        <div style={{ display: "flex", flexDirection: "column", marginTop: 28 }}>
+          <div
+            style={{
+              display: "flex",
+              fontSize: 14,
+              color: MUTED,
+              letterSpacing: 2,
+              textTransform: "uppercase",
+            }}
+          >
             Squad draft
           </div>
-          <div style={{ fontSize: 44, fontWeight: 800, lineHeight: 1.05 }}>{draft.n}</div>
-          <div style={{ marginTop: 6, fontSize: 16, color: MUTED }}>
-            £{totalCost.toFixed(1)}m used of £{budget.toFixed(1)}m budget
+          <div style={{ display: "flex", fontSize: 52, fontWeight: 900, lineHeight: 1.05 }}>
+            {draft.n}
+          </div>
+          <div style={{ display: "flex", marginTop: 8, fontSize: 18, color: MUTED }}>
+            {budgetLine}
           </div>
         </div>
 
         {/* Squad rows */}
-        <div style={{ marginTop: 22, display: "flex", flexDirection: "column", gap: 10, flex: 1 }}>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            marginTop: 28,
+            flex: 1,
+          }}
+        >
           {[1, 2, 3, 4].map((etype) => (
-            <div key={etype} style={{ display: "flex", flexDirection: "column" }}>
-              <div style={{ fontSize: 11, color: MUTED, letterSpacing: 1.2, textTransform: "uppercase" }}>
+            <div
+              key={etype}
+              style={{ display: "flex", flexDirection: "column", marginBottom: 12 }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  fontSize: 11,
+                  color: MUTED,
+                  letterSpacing: 1.4,
+                  textTransform: "uppercase",
+                  marginBottom: 4,
+                }}
+              >
                 {POS_LABEL[etype]}
               </div>
-              <div style={{ display: "flex", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap" }}>
                 {byPos[etype].map((id) => {
                   const e = byId.get(id);
                   if (!e) return null;
                   const isCap = id === draft.c;
-                  const isVice = id === draft.v;
+                  const isVice = id === draft.v && !isCap;
+                  const ringColor = isCap ? AMBER : isVice ? "#cbd5e1" : BORDER;
                   return (
                     <div
                       key={id}
@@ -137,19 +180,20 @@ export async function GET(req: NextRequest) {
                         display: "flex",
                         flexDirection: "column",
                         alignItems: "center",
-                        gap: 4,
                         padding: 8,
+                        marginRight: 8,
+                        marginBottom: 4,
                         borderRadius: 10,
                         background: CARD,
-                        border: `1px solid ${isCap ? AMBER : isVice ? "#cbd5e1" : BORDER}`,
-                        width: 100,
+                        border: `1px solid ${ringColor}`,
+                        width: 104,
                       }}
                     >
-                      <div style={{ position: "relative", display: "flex" }}>
+                      <div style={{ display: "flex", position: "relative" }}>
                         <img
                           src={`https://resources.premierleague.com/premierleague/photos/players/110x140/p${e.code}.png`}
-                          width={42}
-                          height={54}
+                          width={46}
+                          height={58}
                           alt=""
                           style={{ borderRadius: 8 }}
                         />
@@ -157,38 +201,38 @@ export async function GET(req: NextRequest) {
                           <div
                             style={{
                               position: "absolute",
-                              top: -4,
-                              right: -4,
-                              width: 18,
-                              height: 18,
+                              top: -6,
+                              right: -6,
+                              width: 20,
+                              height: 20,
                               borderRadius: 999,
                               background: AMBER,
                               color: "#451a03",
                               display: "flex",
                               alignItems: "center",
                               justifyContent: "center",
-                              fontSize: 11,
+                              fontSize: 12,
                               fontWeight: 800,
                             }}
                           >
                             C
                           </div>
                         )}
-                        {isVice && !isCap && (
+                        {isVice && (
                           <div
                             style={{
                               position: "absolute",
-                              top: -4,
-                              right: -4,
-                              width: 18,
-                              height: 18,
+                              top: -6,
+                              right: -6,
+                              width: 20,
+                              height: 20,
                               borderRadius: 999,
                               background: "#cbd5e1",
                               color: "#0f172a",
                               display: "flex",
                               alignItems: "center",
                               justifyContent: "center",
-                              fontSize: 11,
+                              fontSize: 12,
                               fontWeight: 800,
                             }}
                           >
@@ -196,13 +240,27 @@ export async function GET(req: NextRequest) {
                           </div>
                         )}
                       </div>
-                      <div style={{ fontSize: 13, fontWeight: 600, maxWidth: 90, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          fontSize: 13,
+                          fontWeight: 700,
+                          marginTop: 4,
+                          maxWidth: 92,
+                          overflow: "hidden",
+                        }}
+                      >
                         {e.web_name}
                       </div>
-                      <div style={{ fontSize: 11, color: MUTED, display: "flex", gap: 4 }}>
-                        <span>{teamShort.get(e.team) ?? "?"}</span>
-                        <span>·</span>
-                        <span>£{(e.now_cost / 10).toFixed(1)}</span>
+                      <div
+                        style={{
+                          display: "flex",
+                          fontSize: 11,
+                          color: MUTED,
+                          marginTop: 2,
+                        }}
+                      >
+                        {`${teamShort.get(e.team) ?? "?"} · £${(e.now_cost / 10).toFixed(1)}`}
                       </div>
                     </div>
                   );
@@ -215,19 +273,18 @@ export async function GET(req: NextRequest) {
         {/* Footer */}
         <div
           style={{
-            paddingTop: 16,
-            borderTop: `1px solid ${BORDER}`,
             display: "flex",
+            flexDirection: "row",
             justifyContent: "space-between",
             alignItems: "center",
-            fontSize: 12,
+            paddingTop: 16,
+            borderTop: `1px solid ${BORDER}`,
+            fontSize: 13,
             color: MUTED,
           }}
         >
-          <span>
-            Captain: {captain ? captain.web_name : "—"} · Vice: {vice ? vice.web_name : "—"}
-          </span>
-          <span>Beat your rivals.</span>
+          <div style={{ display: "flex" }}>{captainLine}</div>
+          <div style={{ display: "flex", color: EMERALD, fontWeight: 700 }}>Beat your rivals.</div>
         </div>
       </div>
     ),
