@@ -22,6 +22,7 @@ import { MatchesPanel } from "@/components/MatchesPanel";
 import { MySquadLivePanel } from "@/components/MySquadLivePanel";
 import { BottomNav, type TabId } from "@/components/BottomNav";
 import { FloatingChat } from "@/components/FloatingChat";
+import { FlipCard } from "@/components/FlipCard";
 import { IntelPanel } from "@/components/IntelPanel";
 import { RetrospectivePanel } from "@/components/RetrospectivePanel";
 import { LivePanel } from "@/components/LivePanel";
@@ -298,16 +299,40 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
                 label="Closest rival"
                 value={closestRival.rivalName}
                 sub={`${closestRival.pointsBehind} pts ahead`}
+                back={
+                  <>
+                    <div className="font-semibold text-foreground">{closestRival.rivalName}</div>
+                    <div>Rank #{closestRival.rivalRank}</div>
+                    <div>Total {closestRival.rivalExpected.toFixed(0)} xP this GW</div>
+                    <div>You trail by {closestRival.pointsBehind} pts season-to-date</div>
+                  </>
+                }
               />
               <Stat
                 label="Projected XI"
                 value={`${projections.user.startingXIPoints.toFixed(1)}`}
                 sub={`σ ${projections.user.stdev.toFixed(1)}`}
+                back={
+                  <>
+                    <div className="font-semibold text-foreground">Your starting XI xP</div>
+                    <div>Sum of per-player xP including captain multiplier</div>
+                    <div>σ = Monte-Carlo standard deviation</div>
+                    <div>Higher σ = noisier swing potential</div>
+                  </>
+                }
               />
               <Stat
                 label="Overtake odds"
                 value={`${Math.round(closestRival.overtakeProbability * 100)}%`}
                 sub={`xP Δ ${closestRival.expectedDelta > 0 ? "+" : ""}${closestRival.expectedDelta.toFixed(1)}`}
+                back={
+                  <>
+                    <div className="font-semibold text-foreground">Single-GW overtake</div>
+                    <div>P(your score &gt; {closestRival.rivalName}&apos;s) over one GW</div>
+                    <div>Expected delta: {closestRival.expectedDelta >= 0 ? "+" : ""}{closestRival.expectedDelta.toFixed(1)} xP</div>
+                    <div>50%+ = even-money territory</div>
+                  </>
+                }
               />
             </div>
           )}
@@ -506,14 +531,35 @@ function SectionNav({ sections }: { sections: { id: string; label: string }[] })
   );
 }
 
-function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div className="rounded-lg border bg-card p-2.5 sm:p-4">
-      <div className="text-[10px] uppercase tracking-wide text-muted-foreground sm:text-xs">{label}</div>
+function Stat({
+  label,
+  value,
+  sub,
+  back,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  /** Optional reverse-side content; renders as a tap-to-flip card. */
+  back?: React.ReactNode;
+}) {
+  const face = (
+    <div className="h-full rounded-lg border bg-card p-2.5 sm:p-4">
+      <div className="flex items-center justify-between gap-1">
+        <span className="text-[10px] uppercase tracking-wide text-muted-foreground sm:text-xs">{label}</span>
+        {back && <span aria-hidden className="text-[9px] text-muted-foreground">↻</span>}
+      </div>
       <div className="mt-1 truncate text-base font-semibold sm:text-lg">{value}</div>
       {sub && <div className="truncate text-[10px] text-muted-foreground sm:text-xs">{sub}</div>}
     </div>
   );
+  if (!back) return face;
+  const reverse = (
+    <div className="h-full rounded-lg border border-primary/40 bg-card p-2.5 text-[11px] leading-snug text-muted-foreground sm:p-4 sm:text-xs">
+      {back}
+    </div>
+  );
+  return <FlipCard front={face} back={reverse} />;
 }
 
 function LoadingShell() {
