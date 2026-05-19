@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, Crown, Plus, Trash2, X } from "lucide-react";
+import { Check, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PlayerPhoto } from "@/components/PlayerPhoto";
 import { PlayerPicker } from "@/components/PlayerPicker";
+import { MagneticCaptainBadge } from "@/components/MagneticCaptainBadge";
 import { SLOT_LABELS, SLOTS, type PickerPlayer, type Position, type SquadDraft } from "@/lib/drafts/types";
 import { validateDraft } from "@/lib/drafts/validate";
 import { upsertDraft } from "@/lib/drafts/storage";
@@ -22,6 +23,21 @@ interface Props {
 export function DraftEditor({ teamId, initial, onClose, onSaved }: Props) {
   const [draft, setDraft] = useState<SquadDraft>(initial);
   const [pickerSlot, setPickerSlot] = useState<number | null>(null);
+  const [hoverInfo, setHoverInfo] = useState<{ id: number | null; label: string }>({ id: null, label: "" });
+
+  // DOM anchors keyed by player id — populated by the slot tiles.
+  const anchorRefs = useRef<Map<number, HTMLElement>>(new Map());
+  const getAnchors = () =>
+    [...anchorRefs.current.entries()].map(([id, el]) => ({ id, el }));
+
+  // Listen for the magnetic-hover broadcast so we can highlight the
+  // currently-hovered slot tile (only one badge can broadcast at a time).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handler = (e: Event) => setHoverInfo((e as CustomEvent).detail);
+    window.addEventListener("magnetic-hover", handler);
+    return () => window.removeEventListener("magnetic-hover", handler);
+  }, []);
 
   const playersQ = useQuery({
     queryKey: ["players"],
@@ -112,6 +128,29 @@ export function DraftEditor({ teamId, initial, onClose, onSaved }: Props) {
           </Button>
         </div>
 
+        {/* Magnetic captain/vice dock — drag onto a player tile to assign. */}
+        <div className="flex items-center justify-between gap-3 border-b bg-card/40 px-4 py-2 text-[11px] text-muted-foreground">
+          <span>
+            <span className="font-medium text-foreground">Drag</span> the badges onto a player to assign{" "}
+            <span className="text-amber-400">captain</span> /{" "}
+            <span className="text-slate-200">vice</span>.
+          </span>
+          <div className="flex items-center gap-3">
+            <MagneticCaptainBadge
+              getAnchors={getAnchors}
+              label="C"
+              variant="captain"
+              onAssign={(id) => setCaptain(id)}
+            />
+            <MagneticCaptainBadge
+              getAnchors={getAnchors}
+              label="V"
+              variant="vice"
+              onAssign={(id) => setVice(id)}
+            />
+          </div>
+        </div>
+
         {/* Budget meter */}
         <div className="border-b bg-card/60 px-4 py-2 text-xs">
           <div className="mb-1 flex items-center justify-between">
@@ -147,45 +186,56 @@ export function DraftEditor({ teamId, initial, onClose, onSaved }: Props) {
                   const p = id != null ? byId.get(id) : null;
                   const isCaptain = id != null && draft.captainId === id;
                   const isVice = id != null && draft.viceId === id;
+                  const isHovered = hoverInfo.id === id && id != null;
                   return (
                     <div
                       key={slotIdx}
                       className={cn(
-                        "relative flex flex-col items-center gap-1 rounded-lg border bg-card p-2",
+                        "relative flex flex-col items-center gap-1 rounded-lg border bg-card p-2 transition-all",
                         isCaptain && "ring-2 ring-amber-400",
-                        isVice && "ring-1 ring-slate-300",
+                        isVice && !isCaptain && "ring-1 ring-slate-300",
+                        isHovered && hoverInfo.label === "C" && "scale-105 ring-2 ring-amber-300",
+                        isHovered && hoverInfo.label === "V" && "scale-105 ring-2 ring-slate-200",
                       )}
                     >
                       {p ? (
                         <>
-                          <PlayerPhoto code={p.code} name={p.webName} size="md" />
+                          <div
+                            ref={(el) => {
+                              if (id == null) return;
+                              if (el) anchorRefs.current.set(id, el);
+                              else anchorRefs.current.delete(id);
+                            }}
+                            className="relative"
+                          >
+                            <PlayerPhoto code={p.code} name={p.webName} size="md" />
+                            {isCaptain && (
+                              <span
+                                aria-label="Captain"
+                                style={{
+                                  background:
+                                    "linear-gradient(120deg,#fde68a 0%,#f59e0b 35%,#fbbf24 60%,#f59e0b 100%)",
+                                  boxShadow: "0 0 8px #f59e0b88",
+                                }}
+                                className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold text-amber-950"
+                              >
+                                C
+                              </span>
+                            )}
+                            {isVice && !isCaptain && (
+                              <span
+                                aria-label="Vice captain"
+                                className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-slate-200 text-[9px] font-bold text-slate-900 shadow"
+                              >
+                                V
+                              </span>
+                            )}
+                          </div>
                           <div className="w-full truncate text-center text-[11px] font-medium">{p.webName}</div>
                           <div className="text-[10px] text-muted-foreground">
                             {p.team} · £{p.price.toFixed(1)}
                           </div>
                           <div className="mt-1 flex gap-1">
-                            <button
-                              type="button"
-                              title={isCaptain ? "Captain" : "Set captain"}
-                              onClick={() => setCaptain(id!)}
-                              className={cn(
-                                "rounded-full p-1 transition-colors",
-                                isCaptain ? "bg-amber-400 text-amber-950" : "bg-white/5 text-muted-foreground hover:text-foreground",
-                              )}
-                            >
-                              <Crown className="h-3 w-3" />
-                            </button>
-                            <button
-                              type="button"
-                              title={isVice ? "Vice captain" : "Set vice captain"}
-                              onClick={() => setVice(id!)}
-                              className={cn(
-                                "rounded-full px-1.5 py-0.5 text-[9px] font-bold transition-colors",
-                                isVice ? "bg-slate-200 text-slate-900" : "bg-white/5 text-muted-foreground hover:text-foreground",
-                              )}
-                            >
-                              V
-                            </button>
                             <button
                               type="button"
                               title="Remove"
