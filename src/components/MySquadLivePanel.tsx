@@ -6,9 +6,14 @@ import { Line, LineChart, ResponsiveContainer, Tooltip as ChartTooltip } from "r
 import { ArrowDown, ArrowUp, ArrowUpFromLine, Radio, RefreshCcw } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { motion } from "framer-motion";
 import { PlayerDetailModal } from "@/components/PlayerDetailModal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
+import { GoalCelebration } from "@/components/GoalCelebration";
+import { StreakBadge } from "@/components/StreakBadge";
+import { PitchTilt } from "@/components/PitchTilt";
+import { PointBubble } from "@/components/PointBubble";
 import { useCaptainConfetti } from "@/lib/use-captain-confetti";
 import { cn } from "@/lib/utils";
 
@@ -156,11 +161,16 @@ export function MySquadLivePanel({ teamId, leagueId, refreshSignal = 0 }: Props)
 
   return (
     <Card>
+      <GoalCelebration
+        triggerValue={captain?.pointsWithMultiplier}
+        subtitle={captain ? `${captain.webName} · ×${captain.multiplier}` : undefined}
+      />
       <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-base">
+        <CardTitle className="flex flex-wrap items-center gap-2 text-base">
           <Radio className="h-4 w-4 text-primary" />
           Live pitch · GW {data.gw}
           <RefreshCcw className={cn("ml-1 h-3 w-3 text-muted-foreground", q.isFetching && "animate-spin")} />
+          <span className="ml-auto"><StreakBadge teamId={teamId} /></span>
         </CardTitle>
         <CardDescription>
           Your squad with live points, captain ×{captain?.multiplier ?? 2}, fixture status, provisional bonus, and autosub preview. Tap any non-captain starter for a captain-swap what-if.
@@ -169,18 +179,20 @@ export function MySquadLivePanel({ teamId, leagueId, refreshSignal = 0 }: Props)
       <CardContent className="space-y-3">
         <MetricsHeader metrics={data.metrics} />
 
-        <div
-          className="relative overflow-hidden rounded-2xl border"
-          style={{ background: "linear-gradient(to bottom, hsl(120 55% 32%), hsl(120 50% 27%))" }}
-        >
-          <PitchLines />
-          <div className="relative flex flex-col gap-3 px-1 py-4 sm:gap-4 sm:px-2 sm:py-5">
-            <Row players={gk} onClick={onTileClick} />
-            <Row players={def} onClick={onTileClick} />
-            <Row players={mid} onClick={onTileClick} />
-            <Row players={fwd} onClick={onTileClick} />
+        <PitchTilt>
+          <div
+            className="relative overflow-hidden rounded-2xl border"
+            style={{ background: "linear-gradient(to bottom, hsl(120 55% 32%), hsl(120 50% 27%))" }}
+          >
+            <PitchLines />
+            <div className="relative flex flex-col gap-3 px-1 py-4 sm:gap-4 sm:px-2 sm:py-5">
+              <Row players={gk} onClick={onTileClick} />
+              <Row players={def} onClick={onTileClick} />
+              <Row players={mid} onClick={onTileClick} />
+              <Row players={fwd} onClick={onTileClick} />
+            </div>
           </div>
-        </div>
+        </PitchTilt>
 
         <BenchStrip bench={data.bench} onClick={onTileClick} />
       </CardContent>
@@ -316,6 +328,7 @@ function Tile({ player, onClick, small = false }: { player: LivePlayer; onClick:
       )}
     >
       <div className="relative h-9 w-9 sm:h-11 sm:w-11">
+        <PointBubble livePoints={player.livePoints} />
         {imgFailed || player.teamCode === 0 ? (
           <div className="flex h-full w-full items-center justify-center rounded-md bg-white/85 text-[10px] font-bold text-slate-900" aria-hidden>
             {player.teamShort}
@@ -331,7 +344,19 @@ function Tile({ player, onClick, small = false }: { player: LivePlayer; onClick:
           />
         )}
         {player.isCaptain && (
-          <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-amber-400 text-[9px] font-bold text-amber-950 shadow">C</span>
+          <motion.span
+            animate={{ rotateY: 360 }}
+            transition={{ duration: 3.5, ease: "linear", repeat: Infinity }}
+            style={{
+              transformStyle: "preserve-3d",
+              background:
+                "linear-gradient(120deg,#fde68a 0%,#f59e0b 35%,#fbbf24 60%,#f59e0b 100%)",
+              boxShadow: "0 0 10px #f59e0b80, inset 0 0 4px #fff8",
+            }}
+            className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold text-amber-950"
+          >
+            C
+          </motion.span>
         )}
         {!player.isCaptain && player.isVice && (
           <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-slate-200 text-[9px] font-bold text-slate-900 shadow">V</span>
@@ -398,16 +423,36 @@ function BenchStrip({ bench, onClick }: { bench: LivePlayer[]; onClick: (p: Live
   const inactiveBenchTotal = bench
     .filter((p) => !p.autosubbedIn)
     .reduce((s, p) => s + p.livePoints, 0);
+  // Scale up to a 15-pt "max realistic single-GW bench loss".
+  const meterPct = Math.min(100, (inactiveBenchTotal / 15) * 100);
+  const danger = inactiveBenchTotal >= 10;
   return (
     <div className="overflow-hidden rounded-2xl border bg-muted/40 px-2 py-3">
       <div className="mb-2 flex items-center justify-between px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
         <span>Bench (autosub order)</span>
         {inactiveBenchTotal > 0 && (
-          <span title="Points scored by your bench that didn't count (no autosub).">
-            on bench: <span className="font-mono text-slate-500">{inactiveBenchTotal}</span> pts
-          </span>
+          <motion.span
+            animate={{ scale: danger ? [1, 1.08, 1] : 1 }}
+            transition={{ duration: 0.8, repeat: danger ? Infinity : 0 }}
+            title="Points scored by your bench that didn't count (no autosub)."
+            className={cn("font-mono", danger ? "text-rose-400" : "text-slate-500")}
+          >
+            on bench: {inactiveBenchTotal} pts
+          </motion.span>
         )}
       </div>
+      {inactiveBenchTotal > 0 && (
+        <div className="mb-2 h-1 overflow-hidden rounded-full bg-white/5">
+          <motion.div
+            animate={{
+              width: `${meterPct}%`,
+              boxShadow: danger ? "0 0 8px #fb7185aa" : "0 0 0 transparent",
+            }}
+            transition={{ type: "spring", stiffness: 180, damping: 22 }}
+            className={cn("h-full", danger ? "bg-rose-500" : "bg-slate-500")}
+          />
+        </div>
+      )}
       <div className="flex w-full justify-around gap-0.5 sm:gap-1.5">
         {bench.map((p, i) => (
           <div key={p.playerId} className="flex min-w-0 flex-1 basis-0 max-w-[88px] flex-col items-center gap-1">

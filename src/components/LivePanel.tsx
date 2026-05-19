@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Activity, Crown, Radio } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { cn } from "@/lib/utils";
 
@@ -136,12 +137,15 @@ export function LivePanel({ teamId, leagueId, refreshSignal = 0 }: Props) {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <ul className="divide-y rounded-md border">
+          <ul className="divide-y overflow-hidden rounded-md border">
+            <AnimatePresence initial={false}>
             {rows.map((m, i) => {
               const isUser = m.entryId === user.entryId;
               return (
-                <li
+                <motion.li
                   key={m.entryId}
+                  layout
+                  transition={{ type: "spring", stiffness: 260, damping: 26 }}
                   className={cn(
                     "flex flex-wrap items-center gap-3 px-3 py-3 text-sm",
                     isUser && "bg-primary/10",
@@ -174,9 +178,10 @@ export function LivePanel({ teamId, leagueId, refreshSignal = 0 }: Props) {
                       {m.played} played · {m.playing} live · {m.toPlay} to play
                     </div>
                   </div>
-                </li>
+                </motion.li>
               );
             })}
+            </AnimatePresence>
           </ul>
         </CardContent>
       </Card>
