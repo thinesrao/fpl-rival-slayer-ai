@@ -11,6 +11,7 @@ import { PlayerDetailModal } from "@/components/PlayerDetailModal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { GoalCelebration } from "@/components/GoalCelebration";
+import { StreakBadge } from "@/components/StreakBadge";
 import { useCaptainConfetti } from "@/lib/use-captain-confetti";
 import { cn } from "@/lib/utils";
 
@@ -163,10 +164,11 @@ export function MySquadLivePanel({ teamId, leagueId, refreshSignal = 0 }: Props)
         subtitle={captain ? `${captain.webName} · ×${captain.multiplier}` : undefined}
       />
       <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-base">
+        <CardTitle className="flex flex-wrap items-center gap-2 text-base">
           <Radio className="h-4 w-4 text-primary" />
           Live pitch · GW {data.gw}
           <RefreshCcw className={cn("ml-1 h-3 w-3 text-muted-foreground", q.isFetching && "animate-spin")} />
+          <span className="ml-auto"><StreakBadge teamId={teamId} /></span>
         </CardTitle>
         <CardDescription>
           Your squad with live points, captain ×{captain?.multiplier ?? 2}, fixture status, provisional bonus, and autosub preview. Tap any non-captain starter for a captain-swap what-if.
