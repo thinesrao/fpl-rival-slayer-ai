@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { defaults } from "@/lib/env";
 import { ArrowLeft, Info, Loader2, Swords, Trophy, X } from "lucide-react";
 import { toast } from "sonner";
 
@@ -15,12 +14,19 @@ interface RecentTeam {
   leagueId: number;
   teamName: string;
   managerName: string;
+  leagueName: string;
+}
+
+interface MiniLeagueOption {
+  id: number;
+  name: string;
+  rank: number | null;
+  size: number;
 }
 
 interface TeamPreview {
   team: { id: number; name: string; managerName: string; totalPoints: number; rank: number | null };
-  league: { id: number; name: string };
-  leagueMembershipChecked: boolean;
+  miniLeagues: MiniLeagueOption[];
 }
 
 const RECENT_KEY = "fpl-rival-slayer:recent";
@@ -41,6 +47,7 @@ function readRecent(): RecentTeam[] {
         typeof (r as RecentTeam).teamName === "string" &&
         typeof (r as RecentTeam).managerName === "string",
       )
+      .map((r) => ({ ...r, leagueName: r.leagueName ?? "" }))
       .slice(0, RECENT_MAX);
   } catch {
     return [];
@@ -57,7 +64,9 @@ function writeRecent(list: RecentTeam[]) {
 }
 
 function upsertRecent(entry: RecentTeam): RecentTeam[] {
-  const current = readRecent().filter((r) => r.teamId !== entry.teamId);
+  const current = readRecent().filter(
+    (r) => !(r.teamId === entry.teamId && r.leagueId === entry.leagueId),
+  );
   const next = [entry, ...current].slice(0, RECENT_MAX);
   writeRecent(next);
   return next;
@@ -65,10 +74,10 @@ function upsertRecent(entry: RecentTeam): RecentTeam[] {
 
 export function RivalForm() {
   const router = useRouter();
-  const [teamId, setTeamId] = useState(defaults.teamId ? String(defaults.teamId) : "");
-  const [leagueId, setLeagueId] = useState(defaults.leagueId ? String(defaults.leagueId) : "");
+  const [teamId, setTeamId] = useState("");
   const [status, setStatus] = useState<"idle" | "validating" | "preview" | "confirming">("idle");
   const [preview, setPreview] = useState<TeamPreview | null>(null);
+  const [pickedLeagueId, setPickedLeagueId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [recent, setRecent] = useState<RecentTeam[]>([]);
 
@@ -76,24 +85,28 @@ export function RivalForm() {
     setRecent(readRecent());
   }, []);
 
-  async function runValidate(t: number, l: number) {
+  async function runValidate(t: number) {
     setStatus("validating");
     setError(null);
     try {
-      const res = await fetch(`/api/validate-team?teamId=${t}&leagueId=${l}`);
+      const res = await fetch(`/api/validate-team?teamId=${t}`);
       const json = (await res.json()) as
-        | { ok: true; team: TeamPreview["team"]; league: TeamPreview["league"]; leagueMembershipChecked: boolean }
+        | { ok: true; team: TeamPreview["team"]; miniLeagues: MiniLeagueOption[] }
         | { ok: false; error: string; message: string };
       if (!json.ok) {
         setError(json.message);
         setStatus("idle");
         return;
       }
-      setPreview({
-        team: json.team,
-        league: json.league,
-        leagueMembershipChecked: json.leagueMembershipChecked,
-      });
+      if (json.miniLeagues.length === 0) {
+        setError(
+          "This team isn't in any invitational mini-leagues yet. Join one on fantasy.premierleague.com first.",
+        );
+        setStatus("idle");
+        return;
+      }
+      setPreview({ team: json.team, miniLeagues: json.miniLeagues });
+      setPickedLeagueId(json.miniLeagues[0].id);
       setStatus("preview");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Validation failed. Try again.");
@@ -104,26 +117,23 @@ export function RivalForm() {
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     const t = Number(teamId);
-    const l = Number(leagueId);
     if (!Number.isInteger(t) || t <= 0) {
       toast.error("Enter a valid FPL Team ID (an integer).");
       return;
     }
-    if (!Number.isInteger(l) || l <= 0) {
-      toast.error("Enter a valid Mini-League ID (an integer).");
-      return;
-    }
-    void runValidate(t, l);
+    void runValidate(t);
   }
 
   async function onConfirm() {
-    if (!preview) return;
+    if (!preview || pickedLeagueId === null) return;
+    const pickedLeague = preview.miniLeagues.find((l) => l.id === pickedLeagueId);
+    if (!pickedLeague) return;
     setStatus("confirming");
     try {
       const res = await fetch("/api/auth/set-active", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ teamId: preview.team.id, leagueId: preview.league.id }),
+        body: JSON.stringify({ teamId: preview.team.id, leagueId: pickedLeague.id }),
       });
       const json = (await res.json()) as { ok: boolean; message?: string };
       if (!json.ok) {
@@ -134,12 +144,13 @@ export function RivalForm() {
       setRecent(
         upsertRecent({
           teamId: preview.team.id,
-          leagueId: preview.league.id,
+          leagueId: pickedLeague.id,
           teamName: preview.team.name,
           managerName: preview.team.managerName,
+          leagueName: pickedLeague.name,
         }),
       );
-      router.push(`/dashboard/${preview.team.id}/${preview.league.id}`);
+      router.push(`/dashboard/${preview.team.id}/${pickedLeague.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Network error. Try again.");
       setStatus("preview");
@@ -149,19 +160,21 @@ export function RivalForm() {
   function onReset() {
     setStatus("idle");
     setPreview(null);
+    setPickedLeagueId(null);
     setError(null);
   }
 
   function onPickRecent(r: RecentTeam) {
     setTeamId(String(r.teamId));
-    setLeagueId(String(r.leagueId));
     setError(null);
-    void runValidate(r.teamId, r.leagueId);
+    void runValidate(r.teamId);
   }
 
-  function onRemoveRecent(teamIdToRemove: number, e: React.MouseEvent | React.KeyboardEvent) {
+  function onRemoveRecent(target: { teamId: number; leagueId: number }, e: React.MouseEvent) {
     e.stopPropagation();
-    const next = readRecent().filter((r) => r.teamId !== teamIdToRemove);
+    const next = readRecent().filter(
+      (r) => !(r.teamId === target.teamId && r.leagueId === target.leagueId),
+    );
     writeRecent(next);
     setRecent(next);
   }
@@ -174,40 +187,61 @@ export function RivalForm() {
           onClick={onReset}
           className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
         >
-          <ArrowLeft className="h-3 w-3" /> Use different ID
+          <ArrowLeft className="h-3 w-3" /> Use a different Team ID
         </button>
-        <div className="space-y-3">
-          <div className="flex items-start gap-3">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-base font-semibold text-primary">
-              {initials(preview.team.managerName)}
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-base font-semibold">{preview.team.name}</p>
-              <p className="truncate text-sm text-muted-foreground">{preview.team.managerName}</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {preview.team.totalPoints.toLocaleString()} pts
-                {preview.team.rank ? ` · league rank #${preview.team.rank}` : ""}
-              </p>
-            </div>
+        <div className="flex items-start gap-3">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-base font-semibold text-primary">
+            {initials(preview.team.managerName)}
           </div>
-          <div className="rounded-md border bg-background/50 px-3 py-2">
-            <div className="flex items-center gap-2">
-              <Trophy className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="truncate text-sm">{preview.league.name}</span>
-            </div>
-            {!preview.leagueMembershipChecked && (
-              <p className="mt-1 text-xs text-muted-foreground">
-                Couldn&apos;t verify membership on page 1 of standings — if this team isn&apos;t in this league, the dashboard will show empty data.
-              </p>
-            )}
+          <div className="min-w-0">
+            <p className="truncate text-base font-semibold">{preview.team.name}</p>
+            <p className="truncate text-sm text-muted-foreground">{preview.team.managerName}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {preview.team.totalPoints.toLocaleString()} pts
+              {preview.team.rank ? ` · overall rank #${preview.team.rank.toLocaleString()}` : ""}
+            </p>
           </div>
         </div>
+
+        <div className="space-y-2">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            Pick a mini-league
+          </p>
+          <div className="max-h-64 space-y-1.5 overflow-y-auto rounded-md border bg-background/40 p-1.5">
+            {preview.miniLeagues.map((l) => {
+              const selected = l.id === pickedLeagueId;
+              return (
+                <button
+                  key={l.id}
+                  type="button"
+                  onClick={() => setPickedLeagueId(l.id)}
+                  className={
+                    "flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2 text-left text-sm transition " +
+                    (selected
+                      ? "border-primary bg-primary/10"
+                      : "border-transparent hover:border-border hover:bg-muted/40")
+                  }
+                >
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Trophy className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <span className="truncate">{l.name}</span>
+                  </div>
+                  <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                    {l.rank ? `#${l.rank.toLocaleString()}` : "—"} / {l.size.toLocaleString()}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {error && (
           <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {error}
           </p>
         )}
-        <Button onClick={onConfirm} size="lg" className="w-full" disabled={status === "confirming"}>
+
+        <Button onClick={onConfirm} size="lg" className="w-full" disabled={status === "confirming" || pickedLeagueId === null}>
           {status === "confirming" ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading dashboard…
@@ -250,32 +284,11 @@ export function RivalForm() {
             value={teamId}
             onChange={(e) => setTeamId(e.target.value.replace(/[^0-9]/g, ""))}
             required
+            autoFocus
           />
-        </div>
-
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <Label htmlFor="leagueId">Mini-League ID</Label>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button type="button" aria-label="Where do I find this?" className="text-muted-foreground hover:text-foreground">
-                  <Info className="h-3.5 w-3.5" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent className="max-w-xs">
-                Open your mini-league standings page. The trailing number in the URL
-                (<span className="font-mono">/leagues/12345/standings/c</span>) is your league ID.
-              </TooltipContent>
-            </Tooltip>
-          </div>
-          <Input
-            id="leagueId"
-            inputMode="numeric"
-            placeholder="e.g. 314"
-            value={leagueId}
-            onChange={(e) => setLeagueId(e.target.value.replace(/[^0-9]/g, ""))}
-            required
-          />
+          <p className="text-xs text-muted-foreground">
+            We&apos;ll pull your mini-leagues so you can pick which one to track.
+          </p>
         </div>
 
         {error && (
@@ -291,33 +304,36 @@ export function RivalForm() {
             </>
           ) : (
             <>
-              <Swords className="mr-2 h-4 w-4" /> Slay my rivals
+              <Swords className="mr-2 h-4 w-4" /> Continue
             </>
           )}
         </Button>
 
         {recent.length > 0 && (
           <div className="space-y-2 pt-2">
-            <p className="text-xs uppercase tracking-wider text-muted-foreground">Recent teams</p>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">Recent</p>
             <div className="flex flex-wrap gap-2">
               {recent.map((r) => (
                 <div
-                  key={r.teamId}
-                  className="group inline-flex max-w-full items-center gap-2 rounded-full border bg-background/50 pl-3 pr-1 py-1.5 text-xs hover:border-primary hover:bg-primary/5"
+                  key={`${r.teamId}.${r.leagueId}`}
+                  className="group inline-flex max-w-full items-center gap-2 rounded-full border bg-background/50 py-1.5 pl-3 pr-1 text-xs hover:border-primary hover:bg-primary/5"
                 >
                   <button
                     type="button"
                     onClick={() => onPickRecent(r)}
                     disabled={status === "validating"}
                     className="inline-flex min-w-0 items-center gap-2"
+                    title={`${r.teamName} — ${r.leagueName || "league"}`}
                   >
                     <span className="truncate font-medium">{r.teamName}</span>
-                    <span className="truncate text-muted-foreground">{r.managerName}</span>
+                    {r.leagueName && (
+                      <span className="truncate text-muted-foreground">· {r.leagueName}</span>
+                    )}
                   </button>
                   <button
                     type="button"
                     aria-label={`Remove ${r.teamName}`}
-                    onClick={(e) => onRemoveRecent(r.teamId, e)}
+                    onClick={(e) => onRemoveRecent({ teamId: r.teamId, leagueId: r.leagueId }, e)}
                     className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
                   >
                     <X className="h-3 w-3" />
