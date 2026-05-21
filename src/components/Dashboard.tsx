@@ -3,7 +3,8 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, RefreshCcw } from "lucide-react";
+import { ArrowLeft, ArrowRightLeft, RefreshCcw } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -156,7 +157,20 @@ async function fetchJson<T>(url: string): Promise<T> {
 
 export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const projectionsForceRef = useRef(false);
+  const [switching, setSwitching] = useState(false);
+
+  async function switchTeam() {
+    setSwitching(true);
+    try {
+      await fetch("/api/auth/clear", { method: "POST" });
+    } catch {
+      // Best-effort — even if the request fails the redirect below still works
+      // (the form will let the user pick a different team).
+    }
+    router.push("/");
+  }
   // Cache the active teamId so cross-page features (e.g. /draft/<encoded>
   // import) can pre-fill it without making the user type it again.
   useEffect(() => {
@@ -290,6 +304,18 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
           >
             <RefreshCcw className={cn("h-4 w-4", refreshingAll && "animate-spin")} />
             <span className="ml-1.5 hidden sm:inline">{refreshingAll ? "Refreshing…" : "Refresh"}</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            aria-label="Switch team"
+            title="Switch team"
+            onClick={switchTeam}
+            disabled={switching}
+            className="h-8 w-8 px-0 sm:h-9 sm:w-auto sm:px-3"
+          >
+            <ArrowRightLeft className="h-4 w-4" />
+            <span className="ml-1.5 hidden sm:inline">{switching ? "Switching…" : "Switch"}</span>
           </Button>
         </div>
       </div>
