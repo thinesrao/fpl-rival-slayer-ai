@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { setActiveTeamCookie } from "@/lib/auth/cookie";
-import { validateTeamAndLeague } from "@/lib/auth/validate";
+import { validateTeam } from "@/lib/auth/validate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,7 +31,7 @@ export async function POST(req: Request) {
 
   // Re-validate server-side so a hand-crafted POST can't set a cookie pointing
   // at random IDs.
-  const result = await validateTeamAndLeague(teamId, leagueId);
+  const result = await validateTeam(teamId, leagueId);
   if (!result.ok) {
     return NextResponse.json(result, { status: 400 });
   }

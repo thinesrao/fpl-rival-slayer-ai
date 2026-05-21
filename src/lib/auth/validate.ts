@@ -1,5 +1,12 @@
 import { FplError, getEntry, getLeagueStandings } from "@/lib/fpl/client";
 
+export interface MiniLeagueOption {
+  id: number;
+  name: string;
+  rank: number | null;
+  size: number;
+}
+
 export interface ValidatedTeam {
   ok: true;
   team: {
@@ -9,8 +16,12 @@ export interface ValidatedTeam {
     totalPoints: number;
     rank: number | null;
   };
-  league: { id: number; name: string };
+  // Present when leagueId was provided AND validated successfully.
+  league: { id: number; name: string } | null;
   leagueMembershipChecked: boolean;
+  // All invitational mini-leagues this team is in (sorted: smallest first —
+  // these are typically the friend/work leagues people care about most).
+  miniLeagues: MiniLeagueOption[];
 }
 
 export interface ValidationError {
@@ -21,13 +32,13 @@ export interface ValidationError {
 
 export type ValidationResult = ValidatedTeam | ValidationError;
 
-export async function validateTeamAndLeague(
+export async function validateTeam(
   teamId: number,
-  leagueId: number,
+  leagueId: number | null,
 ): Promise<ValidationResult> {
   const [entryRes, standingsRes] = await Promise.allSettled([
     getEntry(teamId),
-    getLeagueStandings(leagueId, 1),
+    leagueId ? getLeagueStandings(leagueId, 1) : Promise.resolve(null),
   ]);
 
   if (entryRes.status === "rejected") {
@@ -39,25 +50,37 @@ export async function validateTeamAndLeague(
     return { ok: false, error: "fpl_error", message: msg };
   }
 
-  if (standingsRes.status === "rejected") {
-    const err = standingsRes.reason;
-    if (err instanceof FplError && err.status === 404) {
-      return { ok: false, error: "league_not_found", message: `League ID ${leagueId} not found on FPL.` };
+  const entry = entryRes.value;
+
+  let league: { id: number; name: string } | null = null;
+  let leagueMembershipChecked = false;
+  if (leagueId) {
+    if (standingsRes.status === "rejected") {
+      const err = standingsRes.reason;
+      if (err instanceof FplError && err.status === 404) {
+        return { ok: false, error: "league_not_found", message: `League ID ${leagueId} not found on FPL.` };
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      return { ok: false, error: "fpl_error", message: msg };
     }
-    const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: "fpl_error", message: msg };
+    const standings = standingsRes.value!;
+    const row = standings.standings.results.find((r) => r.entry === teamId);
+    leagueMembershipChecked = Boolean(row);
+    league = { id: standings.league.id, name: standings.league.name };
   }
 
-  const entry = entryRes.value;
-  const standings = standingsRes.value;
-
-  const membershipRow = standings.standings.results.find((r) => r.entry === teamId);
-  // Page 1 covers the top 50. If the team is ranked deeper we can't cheaply
-  // confirm membership without walking pages, so we soft-pass and let the
-  // dashboard's own data fetches surface any real mismatch.
-  const leagueMembershipChecked = Boolean(membershipRow);
+  const miniLeagues: MiniLeagueOption[] = (entry.leagues?.classic ?? [])
+    .filter((l) => l.league_type === "x")
+    .map((l) => ({ id: l.id, name: l.name, rank: l.entry_rank, size: l.rank_count }))
+    // Smaller leagues first — those are the leagues with stakes (mates, work).
+    .sort((a, b) => a.size - b.size);
 
   const managerName = `${entry.player_first_name} ${entry.player_last_name}`.trim();
+  const overallRank = entry.summary_overall_rank;
+  // Fall back to overall rank when no specific league was provided.
+  const displayRank = league
+    ? (entry.leagues?.classic ?? []).find((l) => l.id === league!.id)?.entry_rank ?? overallRank
+    : overallRank;
 
   return {
     ok: true,
@@ -66,9 +89,10 @@ export async function validateTeamAndLeague(
       name: entry.name,
       managerName,
       totalPoints: entry.summary_overall_points ?? 0,
-      rank: membershipRow?.rank ?? null,
+      rank: displayRank,
     },
-    league: { id: standings.league.id, name: standings.league.name },
+    league,
     leagueMembershipChecked,
+    miniLeagues,
   };
 }

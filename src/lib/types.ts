@@ -137,6 +137,16 @@ export interface FplPicksResponse {
   picks: FplPick[];
 }
 
+export interface FplEntryLeague {
+  id: number;
+  name: string;
+  short_name: string | null;
+  league_type: string; // "x" = invitational mini-league, "s" = system (region/team), "c" = cup
+  rank_count: number; // total members
+  entry_rank: number | null;
+  entry_last_rank: number | null;
+}
+
 export interface FplEntry {
   id: number;
   name: string;
@@ -147,6 +157,7 @@ export interface FplEntry {
   current_event: number | null;
   last_deadline_bank: number | null;
   last_deadline_value: number | null;
+  leagues?: { classic: FplEntryLeague[] };
 }
 
 // Domain types ---------------------------------------------------------------
