@@ -1,9 +1,15 @@
 import { redirect } from "next/navigation";
 import { RivalForm } from "@/components/RivalForm";
 import { defaults } from "@/lib/env";
+import { readActiveTeamCookie } from "@/lib/auth/cookie";
 import { Target, Newspaper, Brain } from "lucide-react";
 
-export default function Home() {
+export default async function Home() {
+  // Returning user — cookie was set after a previous validated submit.
+  const active = await readActiveTeamCookie();
+  if (active) {
+    redirect(`/dashboard/${active.teamId}/${active.leagueId}`);
+  }
   // Personal-use shortcut: if both defaults are configured, jump straight to the dashboard.
   if (defaults.teamId && defaults.leagueId) {
     redirect(`/dashboard/${defaults.teamId}/${defaults.leagueId}`);
