@@ -28,6 +28,9 @@ interface ManagerLive {
   name: string;
   managerName: string;
   rank: number;
+  /** Season total points (pre-current-GW). The live GW's score is
+   *  liveScore; total + liveScore gives the running season total. */
+  total: number;
   liveScore: number;
   played: number;
   toPlay: number;
@@ -155,6 +158,7 @@ export async function GET(req: NextRequest) {
         name: squad.entry.name,
         managerName: squad.entry.player_name,
         rank: squad.entry.rank,
+        total: squad.entry.total,
         liveScore,
         played,
         toPlay,

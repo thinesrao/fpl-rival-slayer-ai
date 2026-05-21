@@ -18,6 +18,8 @@ interface ManagerLive {
   name: string;
   managerName: string;
   rank: number;
+  /** Season total points before the current GW. */
+  total: number;
   liveScore: number;
   played: number;
   toPlay: number;
@@ -64,9 +66,12 @@ interface Props {
   refreshSignal?: number;
 }
 
+type SortMode = "gw" | "season";
+
 export function LivePanel({ teamId, leagueId, refreshSignal = 0 }: Props) {
   const bustNextRef = useRef(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [sortMode, setSortMode] = useState<SortMode>("gw");
 
   const q = useQuery({
     queryKey: ["live-full", teamId, leagueId],
@@ -91,8 +96,15 @@ export function LivePanel({ teamId, leagueId, refreshSignal = 0 }: Props) {
 
   const rows = useMemo(() => {
     if (!q.data?.user) return [];
-    return [q.data.user, ...q.data.rivals].sort((a, b) => b.liveScore - a.liveScore);
-  }, [q.data]);
+    const everyone = [q.data.user, ...q.data.rivals];
+    if (sortMode === "season") {
+      // Season total + this GW's live score = running season total.
+      return everyone.sort(
+        (a, b) => (b.total + b.liveScore) - (a.total + a.liveScore),
+      );
+    }
+    return everyone.sort((a, b) => b.liveScore - a.liveScore);
+  }, [q.data, sortMode]);
 
   if (q.isLoading) return <Skeleton className="h-64 w-full" />;
   if (q.error) {
@@ -172,52 +184,96 @@ export function LivePanel({ teamId, leagueId, refreshSignal = 0 }: Props) {
       {/* Headline summary */}
       <div className="grid grid-cols-3 gap-2 text-center">
         <SummaryStat
-          label="Your live rank"
+          label={sortMode === "season" ? "Your league rank" : "Your live rank"}
           value={`${userPositionInRows + 1}`}
           accent={userPositionInRows === 0 ? "emerald" : userPositionInRows <= 2 ? "amber" : "default"}
           delay={0}
         />
         <SummaryStat
           label="Leader has"
-          value={`${leader.liveScore}`}
+          value={`${sortMode === "season" ? leader.total + leader.liveScore : leader.liveScore}`}
           subtitle={leader.entryId === user.entryId ? "(you)" : leader.managerName}
           delay={0.05}
         />
         <SummaryStat
           label="Pts behind leader"
-          value={leader.liveScore - user.liveScore}
-          accent={leader.entryId === user.entryId ? "emerald" : leader.liveScore - user.liveScore <= 5 ? "amber" : "rose"}
+          value={
+            sortMode === "season"
+              ? (leader.total + leader.liveScore) - (user.total + user.liveScore)
+              : leader.liveScore - user.liveScore
+          }
+          accent={
+            leader.entryId === user.entryId
+              ? "emerald"
+              : (sortMode === "season"
+                  ? (leader.total + leader.liveScore) - (user.total + user.liveScore)
+                  : leader.liveScore - user.liveScore) <= 5
+              ? "amber"
+              : "rose"
+          }
           delay={0.1}
         />
       </div>
 
       <Card>
-        <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
-          <div>
+        <CardHeader className="flex flex-col items-start gap-3 space-y-0 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
             <CardTitle className="text-base">
-              {isFinished ? "Final scoreboard" : "Live scoreboard"}
+              {sortMode === "season"
+                ? "Season leaderboard"
+                : isFinished
+                ? "Final scoreboard"
+                : "Live scoreboard"}
             </CardTitle>
             <CardDescription>
-              Full mini-league live. <Target className="inline h-3 w-3 text-amber-400" /> marks your{" "}
-              three nearest rivals — pip them to climb a spot.
+              {sortMode === "season" ? (
+                <>Ranked by total points through GW {data.gw}. <Target className="inline h-3 w-3 text-amber-400" /> marks your three nearest rivals.</>
+              ) : (
+                <>Full mini-league live. <Target className="inline h-3 w-3 text-amber-400" /> marks your three nearest rivals — pip them to climb a spot.</>
+              )}
             </CardDescription>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setCollapsed((v) => !v)}
-            className="h-7 px-2 text-xs"
-          >
-            {collapsed ? (
-              <>
-                Show all <ChevronDown className="ml-1 h-3 w-3" />
-              </>
-            ) : (
-              <>
-                Collapse <ChevronUp className="ml-1 h-3 w-3" />
-              </>
-            )}
-          </Button>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {/* GW / Season toggle */}
+            <div className="inline-flex rounded-md border bg-card p-0.5 text-[11px]">
+              <button
+                type="button"
+                onClick={() => setSortMode("gw")}
+                className={cn(
+                  "rounded-sm px-2 py-1 transition-colors",
+                  sortMode === "gw" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                GW {data.gw}
+              </button>
+              <button
+                type="button"
+                onClick={() => setSortMode("season")}
+                className={cn(
+                  "rounded-sm px-2 py-1 transition-colors",
+                  sortMode === "season" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                Season
+              </button>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setCollapsed((v) => !v)}
+              className="h-7 px-2 text-xs"
+            >
+              {collapsed ? (
+                <>
+                  Show all <ChevronDown className="ml-1 h-3 w-3" />
+                </>
+              ) : (
+                <>
+                  Collapse <ChevronUp className="ml-1 h-3 w-3" />
+                </>
+              )}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <motion.ul
@@ -346,10 +402,15 @@ export function LivePanel({ teamId, leagueId, refreshSignal = 0 }: Props) {
                           isUser && "text-primary",
                         )}
                       >
-                        <AnimatedNumber value={m.liveScore} duration={0.6} />
+                        <AnimatedNumber
+                          value={sortMode === "season" ? m.total + m.liveScore : m.liveScore}
+                          duration={0.6}
+                        />
                       </div>
                       <div className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">
-                        {m.played}p · {m.playing}l · {m.toPlay}t
+                        {sortMode === "season"
+                          ? `GW ${m.liveScore}pt · season`
+                          : `${m.played}p · ${m.playing}l · ${m.toPlay}t`}
                       </div>
                     </div>
 
