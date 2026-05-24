@@ -80,7 +80,7 @@ export function FutCard({
   className,
 }: FutCardProps) {
   const [photoErrored, setPhotoErrored] = useState(false);
-  const showStats = stats && stats.length > 0 && size !== "sm";
+  const showStats = stats && stats.length > 0;
   const interactive = !!onClick;
 
   return (
@@ -174,7 +174,7 @@ export function FutCard({
           >
             {name}
           </div>
-          {sub && size !== "sm" && (
+          {sub && (
             <div className="truncate text-center font-mono text-[9px] uppercase tracking-wider opacity-75">
               {sub}
             </div>

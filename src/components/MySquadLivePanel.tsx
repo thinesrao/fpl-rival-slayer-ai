@@ -16,6 +16,15 @@ import { PitchTilt } from "@/components/PitchTilt";
 import { PointBubble } from "@/components/PointBubble";
 import { useCaptainConfetti } from "@/lib/use-captain-confetti";
 import { cn } from "@/lib/utils";
+import { FutCard } from "@/components/fut/FutCard";
+import { type Tier } from "@/lib/fut/tier";
+
+/** Map a player's live points into the gold/silver/bronze tier band. */
+function livePointsTier(points: number): Tier {
+  if (points >= 10) return "gold";
+  if (points >= 4) return "silver";
+  return "bronze";
+}
 
 interface LivePlayer {
   playerId: number;
@@ -65,11 +74,6 @@ interface Props {
   teamId: number;
   leagueId: number;
   refreshSignal?: number;
-}
-
-const KIT_BASE = "https://fantasy.premierleague.com/dist/img/shirts/standard";
-function kitUrl(teamCode: number, isGk: boolean): string {
-  return `${KIT_BASE}/shirt_${teamCode}${isGk ? "_1" : ""}-66.png`;
 }
 
 function formatKickoff(iso: string | null): string {
@@ -302,8 +306,6 @@ function Row({ players, onClick }: { players: LivePlayer[]; onClick: (p: LivePla
 }
 
 function Tile({ player, onClick, small = false }: { player: LivePlayer; onClick: () => void; small?: boolean }) {
-  const isGk = player.elementType === 1;
-  const [imgFailed, setImgFailed] = useState(false);
   const showLive = player.fixtureStatus === "live";
   const showFinished = player.fixtureStatus === "finished";
   const showUpcoming = player.fixtureStatus === "upcoming";
@@ -315,34 +317,35 @@ function Tile({ player, onClick, small = false }: { player: LivePlayer; onClick:
   const totalPoints = isInactiveBench ? player.livePoints : player.pointsWithMultiplier;
   const showProvisional = player.provisionalBonus > 0 && player.bonus === 0;
   const showFinalBonus = player.bonus > 0;
+  const tier = livePointsTier(totalPoints);
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={player.webName}
+    <div
       className={cn(
-        "relative flex min-w-0 flex-1 basis-0 flex-col items-center gap-0.5 transition-transform hover:scale-[1.03] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white",
-        small ? "max-w-[78px]" : "max-w-[88px]",
+        "relative flex min-w-0 flex-1 basis-0 flex-col items-center gap-1",
+        small ? "max-w-[72px]" : "max-w-[88px]",
         player.autosubbedOut && "opacity-40",
-        player.autosubbedIn && "ring-2 ring-emerald-400",
       )}
     >
-      <div className="relative h-9 w-9 sm:h-11 sm:w-11">
+      <div className="relative w-full">
         <PointBubble livePoints={player.livePoints} />
-        {imgFailed || player.teamCode === 0 ? (
-          <div className="flex h-full w-full items-center justify-center rounded-md bg-white/85 text-[10px] font-bold text-slate-900" aria-hidden>
-            {player.teamShort}
-          </div>
-        ) : (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={kitUrl(player.teamCode, isGk)}
-            alt={`${player.teamShort} kit`}
-            loading="lazy"
-            onError={() => setImgFailed(true)}
-            className={cn("h-full w-full object-contain drop-shadow", player.autosubbedOut && "grayscale")}
-          />
-        )}
+        <FutCard
+          tier={tier}
+          ovr={totalPoints}
+          position={player.position}
+          name={player.webName}
+          sub={player.teamShort}
+          captain={player.isCaptain}
+          vice={!player.isCaptain && player.isVice}
+          size="sm"
+          noShine
+          onClick={onClick}
+          className={cn(
+            "!w-full",
+            player.autosubbedIn && "ring-2 ring-emerald-400 ring-offset-1 ring-offset-transparent",
+            player.autosubbedOut && "grayscale",
+          )}
+        />
         {player.isCaptain && (
           <motion.span
             animate={{ rotateY: 360 }}
@@ -353,44 +356,36 @@ function Tile({ player, onClick, small = false }: { player: LivePlayer; onClick:
                 "linear-gradient(120deg,#fde68a 0%,#f59e0b 35%,#fbbf24 60%,#f59e0b 100%)",
               boxShadow: "0 0 10px #f59e0b80, inset 0 0 4px #fff8",
             }}
-            className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold text-amber-950"
+            className="pointer-events-none absolute -right-1 -top-1 z-20 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold text-amber-950"
           >
             C
           </motion.span>
         )}
-        {!player.isCaptain && player.isVice && (
-          <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-slate-200 text-[9px] font-bold text-slate-900 shadow">V</span>
-        )}
         {player.autosubbedIn && (
-          <span className="absolute -left-1 -top-1 flex items-center gap-0.5 rounded bg-emerald-500 px-1 py-0.5 text-[8px] font-bold text-white shadow">
+          <span className="absolute -left-1 -top-1 z-20 flex items-center gap-0.5 rounded bg-emerald-500 px-1 py-0.5 text-[8px] font-bold text-white shadow">
             <ArrowUpFromLine className="h-2.5 w-2.5" />
             IN
           </span>
         )}
-      </div>
-      <div className="w-full overflow-hidden rounded-sm bg-white/95 px-1 py-0.5 text-center leading-tight shadow">
-        <div className={cn("truncate font-semibold text-slate-900", small ? "text-[10px]" : "text-[11px]")}>
-          {player.webName}
-          {player.autosubbedOut && <span className="ml-1 text-rose-600">✗</span>}
-        </div>
-        <div
-          className={cn(
-            "font-mono font-semibold",
-            isInactiveBench ? "text-slate-500" : "text-emerald-700",
-            small ? "text-[11px]" : "text-[12px]",
-          )}
-          title={isInactiveBench ? "Bench points (not counting)" : undefined}
-        >
-          <AnimatedNumber value={totalPoints} duration={0.5} suffix=" pts" />
-          {player.multiplier === 2 && <span className="ml-1 text-[9px] font-normal text-slate-500">×2</span>}
-          {player.multiplier === 3 && <span className="ml-1 text-[9px] font-normal text-amber-600">×3</span>}
-        </div>
-        {(showFinalBonus || showProvisional) && (
-          <div className={cn("inline-block rounded px-1 text-[9px] font-semibold", showFinalBonus ? "bg-amber-200 text-amber-900" : "bg-amber-100 text-amber-700")}>
-            {showProvisional ? "~" : ""}+{player.bonus > 0 ? player.bonus : player.provisionalBonus} bps
-          </div>
+        {(player.multiplier === 2 || player.multiplier === 3) && (
+          <span
+            className={cn(
+              "absolute -left-1 -bottom-1 z-20 rounded px-1 py-0.5 text-[9px] font-bold shadow",
+              player.multiplier === 3 ? "bg-amber-300 text-amber-950" : "bg-zinc-200 text-zinc-800",
+            )}
+            title={`Captain ×${player.multiplier}`}
+          >
+            ×{player.multiplier}
+          </span>
         )}
       </div>
+
+      {(showFinalBonus || showProvisional) && (
+        <div className={cn("inline-block rounded px-1 text-[9px] font-semibold", showFinalBonus ? "bg-amber-200 text-amber-900" : "bg-amber-100 text-amber-700")}>
+          {showProvisional ? "~" : ""}+{player.bonus > 0 ? player.bonus : player.provisionalBonus} bps
+        </div>
+      )}
+
       <div
         className={cn(
           "w-full truncate rounded px-1 py-0.5 text-center text-[9px] font-medium",
@@ -412,7 +407,10 @@ function Tile({ player, onClick, small = false }: { player: LivePlayer; onClick:
           </>
         )}
       </div>
-    </button>
+      {player.autosubbedOut && (
+        <span className="text-[9px] font-bold text-rose-400">✗ AUTOSUB OUT</span>
+      )}
+    </div>
   );
 }
 
