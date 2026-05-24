@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ArrowLeft, Info, Loader2, Swords, Trophy, X } from "lucide-react";
 import { toast } from "sonner";
+import { PackReveal, type PackRevealManager } from "@/components/fut/PackReveal";
 
 interface RecentTeam {
   teamId: number;
@@ -75,11 +76,13 @@ function upsertRecent(entry: RecentTeam): RecentTeam[] {
 export function RivalForm() {
   const router = useRouter();
   const [teamId, setTeamId] = useState("");
-  const [status, setStatus] = useState<"idle" | "validating" | "preview" | "confirming">("idle");
+  const [status, setStatus] = useState<"idle" | "validating" | "preview" | "confirming" | "reveal">("idle");
   const [preview, setPreview] = useState<TeamPreview | null>(null);
   const [pickedLeagueId, setPickedLeagueId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [recent, setRecent] = useState<RecentTeam[]>([]);
+  const [revealManager, setRevealManager] = useState<PackRevealManager | null>(null);
+  const [pendingPush, setPendingPush] = useState<string | null>(null);
 
   useEffect(() => {
     setRecent(readRecent());
@@ -150,7 +153,17 @@ export function RivalForm() {
           leagueName: pickedLeague.name,
         }),
       );
-      router.push(`/dashboard/${preview.team.id}/${pickedLeague.id}`);
+      setRevealManager({
+        name: preview.team.name,
+        managerName: preview.team.managerName,
+        totalPoints: preview.team.totalPoints,
+        overallRank: preview.team.rank,
+        leagueName: pickedLeague.name,
+        leagueRank: pickedLeague.rank,
+        leagueSize: pickedLeague.size,
+      });
+      setPendingPush(`/dashboard/${preview.team.id}/${pickedLeague.id}`);
+      setStatus("reveal");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Network error. Try again.");
       setStatus("preview");
@@ -177,6 +190,15 @@ export function RivalForm() {
     );
     writeRecent(next);
     setRecent(next);
+  }
+
+  if (status === "reveal" && revealManager && pendingPush) {
+    return (
+      <PackReveal
+        manager={revealManager}
+        onDone={() => router.push(pendingPush)}
+      />
+    );
   }
 
   if ((status === "preview" || status === "confirming") && preview) {
