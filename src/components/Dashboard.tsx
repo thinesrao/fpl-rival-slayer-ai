@@ -203,7 +203,7 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
 
   const [refreshSignal, setRefreshSignal] = useState(0);
   const [whatIfOutId, setWhatIfOutId] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<TabId>("pitch");
+  const [activeTab, setActiveTab] = useState<TabId>("squad");
 
   const refreshAll = async () => {
     setRefreshingAll(true);
@@ -301,14 +301,14 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabId)}>
         <TabsList className="hidden w-full justify-start md:flex">
-          <TabsTrigger value="pitch">Pitch</TabsTrigger>
-          <TabsTrigger value="matches">Matches</TabsTrigger>
-          <TabsTrigger value="rivals">Rivals</TabsTrigger>
-          <TabsTrigger value="plan">Plan</TabsTrigger>
-          <TabsTrigger value="drafts">Drafts</TabsTrigger>
+          <TabsTrigger value="squad" className="font-display uppercase tracking-tight">Squad</TabsTrigger>
+          <TabsTrigger value="vs" className="font-display uppercase tracking-tight">VS</TabsTrigger>
+          <TabsTrigger value="coach" className="font-display uppercase tracking-tight">Coach</TabsTrigger>
+          <TabsTrigger value="matches" className="font-display uppercase tracking-tight">Matches</TabsTrigger>
+          <TabsTrigger value="collection" className="font-display uppercase tracking-tight">Collection</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="pitch" className="mt-4 space-y-4">
+        <TabsContent value="squad" className="mt-4 space-y-4">
           {closestRival && (
             <div className="grid grid-cols-3 gap-2 sm:gap-3">
               <Stat
@@ -364,7 +364,7 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
           </details>
         </TabsContent>
 
-        <TabsContent value="plan" className="mt-4 space-y-6">
+        <TabsContent value="coach" className="mt-4 space-y-6">
           <SectionNav
             sections={[
               { id: "outlook", label: "Outlook" },
@@ -454,7 +454,7 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
           <MatchesPanel teamId={teamId} leagueId={leagueId} refreshSignal={refreshSignal} />
         </TabsContent>
 
-        <TabsContent value="rivals" className="mt-4 space-y-6">
+        <TabsContent value="vs" className="mt-4 space-y-6">
           <SectionNav
             sections={[
               { id: "live", label: "Live" },
@@ -507,7 +507,7 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
           )}
         </TabsContent>
 
-        <TabsContent value="drafts" className="mt-4 space-y-4">
+        <TabsContent value="collection" className="mt-4 space-y-4">
           <DraftsPanel teamId={teamId} />
         </TabsContent>
       </Tabs>
