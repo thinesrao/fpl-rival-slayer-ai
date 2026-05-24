@@ -28,8 +28,9 @@ interface ManagerLive {
   name: string;
   managerName: string;
   rank: number;
-  /** Season total points (pre-current-GW). The live GW's score is
-   *  liveScore; total + liveScore gives the running season total. */
+  /** FPL's authoritative season total from /leagues-classic standings.
+   *  Includes the latest finished GW once FPL has updated standings. Do NOT
+   *  add liveScore for a "running total" — that double-counts post-GW. */
   total: number;
   liveScore: number;
   played: number;

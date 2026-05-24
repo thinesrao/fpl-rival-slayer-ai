@@ -98,10 +98,11 @@ export function LivePanel({ teamId, leagueId, refreshSignal = 0 }: Props) {
     if (!q.data?.user) return [];
     const everyone = [q.data.user, ...q.data.rivals];
     if (sortMode === "season") {
-      // Season total + this GW's live score = running season total.
-      return everyone.sort(
-        (a, b) => (b.total + b.liveScore) - (a.total + a.liveScore),
-      );
+      // Mirror the official FPL standings exactly — use the rank field returned
+      // by /leagues-classic/{id}/standings/. Don't add liveScore: `total` from
+      // FPL already includes the latest finished GW once standings update, so
+      // adding it again would double-count and shift positions vs the FPL app.
+      return everyone.slice().sort((a, b) => a.rank - b.rank);
     }
     return everyone.sort((a, b) => b.liveScore - a.liveScore);
   }, [q.data, sortMode]);
@@ -191,7 +192,7 @@ export function LivePanel({ teamId, leagueId, refreshSignal = 0 }: Props) {
         />
         <SummaryStat
           label="Leader has"
-          value={`${sortMode === "season" ? leader.total + leader.liveScore : leader.liveScore}`}
+          value={`${sortMode === "season" ? leader.total : leader.liveScore}`}
           subtitle={leader.entryId === user.entryId ? "(you)" : leader.managerName}
           delay={0.05}
         />
@@ -199,14 +200,14 @@ export function LivePanel({ teamId, leagueId, refreshSignal = 0 }: Props) {
           label="Pts behind leader"
           value={
             sortMode === "season"
-              ? (leader.total + leader.liveScore) - (user.total + user.liveScore)
+              ? leader.total - user.total
               : leader.liveScore - user.liveScore
           }
           accent={
             leader.entryId === user.entryId
               ? "emerald"
               : (sortMode === "season"
-                  ? (leader.total + leader.liveScore) - (user.total + user.liveScore)
+                  ? leader.total - user.total
                   : leader.liveScore - user.liveScore) <= 5
               ? "amber"
               : "rose"
@@ -403,7 +404,7 @@ export function LivePanel({ teamId, leagueId, refreshSignal = 0 }: Props) {
                         )}
                       >
                         <AnimatedNumber
-                          value={sortMode === "season" ? m.total + m.liveScore : m.liveScore}
+                          value={sortMode === "season" ? m.total : m.liveScore}
                           duration={0.6}
                         />
                       </div>
