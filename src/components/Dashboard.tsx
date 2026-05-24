@@ -375,7 +375,7 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
           />
 
           <section id="outlook" className="space-y-2 scroll-mt-20">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Outlook</h2>
+            <h2 className="font-display text-sm font-bold uppercase tracking-tight text-muted-foreground">Outlook</h2>
             {data.horizon && data.teams ? (
               <PlanPanel
                 horizon={data.horizon.horizon}
@@ -394,12 +394,12 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
           </section>
 
           <section id="projections" className="space-y-2 scroll-mt-20">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Projections</h2>
+            <h2 className="font-display text-sm font-bold uppercase tracking-tight text-muted-foreground">Projections</h2>
             <OvertakeMeter odds={projections.overtake} />
           </section>
 
           <section id="suggested" className="space-y-2 scroll-mt-20">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Suggested moves</h2>
+            <h2 className="font-display text-sm font-bold uppercase tracking-tight text-muted-foreground">Suggested moves</h2>
             {!aiEnabled ? (
               <Alert variant="warning">
                 <AlertTitle>AI Coach disabled</AlertTitle>
@@ -445,7 +445,7 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
           </section>
 
           <section id="chips" className="space-y-2 scroll-mt-20">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Chip timing</h2>
+            <h2 className="font-display text-sm font-bold uppercase tracking-tight text-muted-foreground">Chip timing</h2>
             <RivalChipsPanel teamId={teamId} leagueId={leagueId} />
           </section>
         </TabsContent>
@@ -466,12 +466,12 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
           />
 
           <section id="live" className="space-y-2 scroll-mt-20">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Live</h2>
+            <h2 className="font-display text-sm font-bold uppercase tracking-tight text-muted-foreground">Live</h2>
             <LivePanel teamId={teamId} leagueId={leagueId} refreshSignal={refreshSignal} />
           </section>
 
           <section id="squad" className="space-y-2 scroll-mt-20">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Squad comparison</h2>
+            <h2 className="font-display text-sm font-bold uppercase tracking-tight text-muted-foreground">Squad comparison</h2>
             <p className="text-xs text-muted-foreground">
               Tap any of your players to run a what-if swap simulation.
             </p>
@@ -486,7 +486,7 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
           </section>
 
           <section id="diff" className="space-y-2 scroll-mt-20">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Differentials</h2>
+            <h2 className="font-display text-sm font-bold uppercase tracking-tight text-muted-foreground">Differentials</h2>
             {analysisQuery.isLoading && aiEnabled ? (
               <Skeleton className="h-40 w-full" />
             ) : (
@@ -495,13 +495,13 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
           </section>
 
           <section id="heatmap" className="space-y-2 scroll-mt-20">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">League ownership</h2>
+            <h2 className="font-display text-sm font-bold uppercase tracking-tight text-muted-foreground">League ownership</h2>
             <LeagueHeatmap leagueId={leagueId} topN={10} />
           </section>
 
           {eo && priceMoves && (
             <section id="intel" className="space-y-2 scroll-mt-20">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Intel</h2>
+              <h2 className="font-display text-sm font-bold uppercase tracking-tight text-muted-foreground">Intel</h2>
               <IntelPanel eo={eo} priceMoves={priceMoves} />
             </section>
           )}
