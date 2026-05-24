@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, RefreshCcw } from "lucide-react";
 import { LeagueSwitcher } from "@/components/LeagueSwitcher";
+import { LogoutButton } from "@/components/LogoutButton";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -293,6 +294,7 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
             <span className="ml-1.5 hidden sm:inline">{refreshingAll ? "Refreshing…" : "Refresh"}</span>
           </Button>
           <LeagueSwitcher teamId={teamId} leagueId={leagueId} />
+          <LogoutButton />
         </div>
       </div>
 

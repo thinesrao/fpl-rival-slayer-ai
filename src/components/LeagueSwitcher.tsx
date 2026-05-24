@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRightLeft, Check, Loader2, LogOut, Trophy } from "lucide-react";
+import { ArrowRightLeft, Check, Loader2, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -85,15 +85,6 @@ export function LeagueSwitcher({ teamId, leagueId }: Props) {
     }
   }
 
-  async function useDifferentTeam() {
-    try {
-      await fetch("/api/auth/clear", { method: "POST" });
-    } catch {
-      // Best-effort
-    }
-    router.push("/");
-  }
-
   return (
     <div ref={rootRef} className="relative">
       <Button
@@ -157,16 +148,6 @@ export function LeagueSwitcher({ teamId, leagueId }: Props) {
                   </button>
                 );
               })}
-          </div>
-          <div className="border-t">
-            <button
-              type="button"
-              onClick={useDifferentTeam}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-            >
-              <LogOut className="h-3.5 w-3.5" />
-              Use a different team
-            </button>
           </div>
         </div>
       )}
