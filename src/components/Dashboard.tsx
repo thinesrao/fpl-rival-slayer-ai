@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, RefreshCcw } from "lucide-react";
 import { LeagueSwitcher } from "@/components/LeagueSwitcher";
 import { LogoutButton } from "@/components/LogoutButton";
+import { FutCardCompact } from "@/components/fut/FutCardCompact";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -261,18 +262,32 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
   return (
     <div className="container mx-auto px-4 py-4 pb-24 md:py-6 md:pb-6">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3 md:mb-6">
-        <div>
-          <Link href="/" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+        <div className="min-w-0 flex-1">
+          <Link href="/" className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:text-foreground">
             <ArrowLeft className="h-3 w-3" /> New search
           </Link>
-          <h1 className="mt-1 text-lg font-bold sm:text-2xl">{ctx.leagueName}</h1>
-          <p className="text-xs text-muted-foreground sm:text-sm">
-            You: <span className="font-medium text-foreground">{ctx.user.entry.name}</span> · rank{" "}
-            <span className="font-medium text-foreground">#{ctx.user.entry.rank}</span> ·{" "}
-            <span className="inline-flex items-baseline align-baseline font-medium text-foreground">
-              <Odometer value={ctx.user.entry.total} minDigits={4} height={18} />
-            </span> pts
-          </p>
+          <h1 className="mt-1 font-display text-lg font-extrabold uppercase tracking-tight sm:text-2xl">
+            {ctx.leagueName}
+          </h1>
+          <div className="mt-2 max-w-md">
+            <FutCardCompact
+              tier="gold"
+              ovr={Math.max(60, Math.min(95, 100 - (ctx.user.entry.rank - 1) * 2))}
+              position="MGR"
+              name={ctx.user.entry.name}
+              sub={`Rank #${ctx.user.entry.rank}`}
+              trailing={
+                <div className="text-right">
+                  <span className="inline-flex items-baseline font-display text-lg font-extrabold tabular-nums leading-none">
+                    <Odometer value={ctx.user.entry.total} minDigits={4} height={20} />
+                  </span>
+                  <div className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+                    season pts
+                  </div>
+                </div>
+              }
+            />
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           <NotificationToggle teamId={teamId} />

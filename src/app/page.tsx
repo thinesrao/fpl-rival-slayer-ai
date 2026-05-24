@@ -12,13 +12,13 @@ export default async function Home() {
 
   return (
     <main className="relative min-h-screen overflow-hidden">
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(60%_60%_at_50%_0%,hsl(var(--primary)/0.25),transparent_70%)]" />
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(60%_60%_at_50%_0%,hsl(var(--fut-gold)/0.18),transparent_70%)]" />
       <div className="container mx-auto flex min-h-screen flex-col items-center justify-center px-4 py-16">
         <div className="flex flex-col items-center gap-6 text-center">
-          <span className="rounded-full border bg-card/60 px-3 py-1 text-xs uppercase tracking-wider text-muted-foreground">
-            For Fantasy Premier League · 2025/26
+          <span className="rounded-full border border-fut-gold/30 bg-card/60 px-3 py-1 font-mono text-[11px] font-bold uppercase tracking-widest text-fut-gold">
+            Fantasy Premier League · 2025/26
           </span>
-          <h1 className="max-w-3xl text-balance text-4xl font-bold tracking-tight sm:text-6xl">
+          <h1 className="max-w-3xl text-balance font-display text-4xl font-extrabold uppercase tracking-tight sm:text-6xl">
             Slay the rivals directly above you in your mini-league.
           </h1>
           <p className="max-w-xl text-balance text-muted-foreground">
@@ -33,17 +33,17 @@ export default async function Home() {
 
         <div className="mt-16 grid w-full max-w-4xl grid-cols-1 gap-4 sm:grid-cols-3">
           <Feature
-            icon={<Target className="h-5 w-5 text-primary" />}
+            icon={<Target className="h-5 w-5 text-fut-gold" />}
             title="Rival-targeted"
             text="Compares your squad to the 2-3 managers immediately above you in your league — not generic advice."
           />
           <Feature
-            icon={<Newspaper className="h-5 w-5 text-primary" />}
+            icon={<Newspaper className="h-5 w-5 text-fut-gold" />}
             title="Live news"
             text="Gemini searches the web for the latest pressers and injury updates before every recommendation."
           />
           <Feature
-            icon={<Brain className="h-5 w-5 text-primary" />}
+            icon={<Brain className="h-5 w-5 text-fut-gold" />}
             title="Overtake odds"
             text="A Monte-Carlo simulation gives you the probability you leapfrog each rival this gameweek."
           />
@@ -58,7 +58,7 @@ function Feature({ icon, title, text }: { icon: React.ReactNode; title: string; 
     <div className="rounded-xl border bg-card/60 p-4">
       <div className="mb-2 flex items-center gap-2">
         {icon}
-        <h3 className="text-sm font-semibold">{title}</h3>
+        <h3 className="font-display text-sm font-bold uppercase tracking-tight">{title}</h3>
       </div>
       <p className="text-sm text-muted-foreground">{text}</p>
     </div>
