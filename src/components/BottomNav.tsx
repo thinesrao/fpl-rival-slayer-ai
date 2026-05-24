@@ -18,10 +18,10 @@ interface NavItem {
 
 const PRIMARY: NavItem[] = [
   { id: "squad", label: "Squad", icon: LayoutGrid },
-  { id: "vs", label: "VS", icon: Swords },
-  { id: "coach", label: "Coach", icon: MessageSquareText },
+  { id: "vs", label: "Rival", icon: Swords },
+  { id: "coach", label: "AI", icon: MessageSquareText },
   { id: "matches", label: "Matches", icon: Radio },
-  { id: "collection", label: "Collection", icon: BookMarked },
+  { id: "collection", label: "Draft", icon: BookMarked },
 ];
 
 interface Props {

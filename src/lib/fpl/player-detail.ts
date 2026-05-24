@@ -61,6 +61,7 @@ export interface PlayerDetailOwnerEntry {
 export interface PlayerDetail {
   player: {
     id: number;
+    code: number;
     webName: string;
     fullName: string;
     teamShort: string;
@@ -212,6 +213,7 @@ export async function buildPlayerDetail(args: BuildArgs): Promise<PlayerDetail> 
   return {
     player: {
       id: player.id,
+      code: player.code ?? 0,
       webName: player.web_name,
       fullName: `${player.first_name} ${player.second_name}`.trim(),
       teamShort: team?.short_name ?? "?",

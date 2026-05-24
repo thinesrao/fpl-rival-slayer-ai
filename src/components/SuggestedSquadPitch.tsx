@@ -4,11 +4,13 @@ import { ArrowLeftRight, Sparkles, Wallet } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { FutCard } from "@/components/fut/FutCard";
+import { PitchBackdrop } from "@/components/fut/PitchBackdrop";
 import { playerOvr, playerTier } from "@/lib/fut/tier";
 
 interface ResolvedPlayer {
   webName: string;
   playerId: number;
+  code: number; // FPL element.code — drives the PL CDN photo URL (0 = unknown)
   teamShort: string;
   teamCode: number;
   elementType: 1 | 2 | 3 | 4;
@@ -78,20 +80,14 @@ export function SuggestedSquadPitch({
         />
       )}
 
-      <div
-        className="relative overflow-hidden rounded-2xl border"
-        style={{
-          background:
-            "linear-gradient(to bottom, hsl(120 55% 32%), hsl(120 50% 27%))",
-        }}
-      >
-        <PitchLines />
+      <div className="relative isolate overflow-hidden rounded-2xl border border-fut-gold/15">
+        <PitchBackdrop />
 
-        <div className="relative flex flex-col gap-3 px-1 py-4 sm:gap-4 sm:px-2 sm:py-5">
-          <Row players={gk} onTileClick={onTileClick} bottomMode={bottomMode} registerAnchor={registerAnchor} highlight={highlight} />
-          <Row players={def} onTileClick={onTileClick} bottomMode={bottomMode} registerAnchor={registerAnchor} highlight={highlight} />
-          <Row players={mid} onTileClick={onTileClick} bottomMode={bottomMode} registerAnchor={registerAnchor} highlight={highlight} />
+        <div className="relative flex flex-col gap-3 px-1 py-5 sm:gap-4 sm:px-2 sm:py-6">
           <Row players={fwd} onTileClick={onTileClick} bottomMode={bottomMode} registerAnchor={registerAnchor} highlight={highlight} />
+          <Row players={mid} onTileClick={onTileClick} bottomMode={bottomMode} registerAnchor={registerAnchor} highlight={highlight} />
+          <Row players={def} onTileClick={onTileClick} bottomMode={bottomMode} registerAnchor={registerAnchor} highlight={highlight} />
+          <Row players={gk} onTileClick={onTileClick} bottomMode={bottomMode} registerAnchor={registerAnchor} highlight={highlight} />
         </div>
       </div>
 
@@ -134,18 +130,6 @@ function Header({
           {freeTransfers} FT
         </span>
       </div>
-    </div>
-  );
-}
-
-function PitchLines() {
-  // Pure-CSS field markings: centre line + circle, two penalty-area arcs.
-  return (
-    <div className="pointer-events-none absolute inset-0">
-      <div className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2 bg-white/15" />
-      <div className="absolute left-1/2 top-1/2 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/15" />
-      <div className="absolute left-1/2 top-0 h-12 w-32 -translate-x-1/2 rounded-b-2xl border border-t-0 border-white/15" />
-      <div className="absolute bottom-0 left-1/2 h-12 w-32 -translate-x-1/2 rounded-t-2xl border border-b-0 border-white/15" />
     </div>
   );
 }
@@ -215,9 +199,12 @@ function Tile({ player, onClick, small = false, bottomMode, registerAnchor, high
         position={player.position}
         name={player.webName}
         sub={sub}
+        photoCode={player.code}
+        teamCode={player.teamCode}
+        teamShort={player.teamShort}
         captain={player.isCaptain}
         vice={!player.isCaptain && player.isVice}
-        size="sm"
+        size="xs"
         noShine
         onClick={clickable ? () => onClick!(player.playerId, player.webName) : undefined}
         className={cn(

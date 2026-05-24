@@ -119,7 +119,7 @@ export function FloatingChat({ teamId, leagueId, hidden = false }: Props) {
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-fut-gold" />
                 <h2 className="font-display text-base font-bold uppercase tracking-tight">
-                  Coach
+                  AI
                 </h2>
               </div>
               <button

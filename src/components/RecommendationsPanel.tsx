@@ -13,6 +13,7 @@ import { SuggestedSquadPitch } from "@/components/SuggestedSquadPitch";
 interface ResolvedPlayer {
   webName: string;
   playerId: number;
+  code: number;
   teamShort: string;
   teamCode: number;
   elementType: 1 | 2 | 3 | 4;

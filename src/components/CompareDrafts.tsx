@@ -84,6 +84,7 @@ function toPitchPayload(draft: SquadDraft, byId: Map<number, PickerPlayer>) {
     return {
       webName: p.webName,
       playerId: p.id,
+      code: p.code,
       teamShort: p.team,
       teamCode: p.teamCode,
       elementType: POS_TO_ELEMENT[p.position],

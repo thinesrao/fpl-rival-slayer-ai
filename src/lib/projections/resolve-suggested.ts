@@ -22,6 +22,7 @@ const POS_BY_ID: Record<number, Position> = { 1: "GKP", 2: "DEF", 3: "MID", 4: "
 export interface ResolvedPlayer {
   webName: string;
   playerId: number; // -1 when the AI named someone we can't find in bs.elements
+  code: number; // FPL element.code — drives the PL CDN player-photo URL
   teamId: number;
   teamShort: string;
   teamCode: number; // for the FPL kit-image URL
@@ -133,6 +134,7 @@ export function resolveSuggestedSquad(args: ResolveArgs): SuggestedSquadResolved
     return {
       webName: el.web_name,
       playerId: el.id,
+      code: el.code ?? 0,
       teamId: el.team,
       teamShort: team?.short_name ?? "?",
       teamCode: team?.code ?? 0,
@@ -186,6 +188,7 @@ function placeholder(webName: string): ResolvedPlayer {
   return {
     webName,
     playerId: -1,
+    code: 0,
     teamId: 0,
     teamShort: "?",
     teamCode: 0,

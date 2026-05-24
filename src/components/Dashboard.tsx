@@ -61,6 +61,7 @@ interface AnalysisResponse {
     startingXi: Array<{
       webName: string;
       playerId: number;
+      code: number;
       teamShort: string;
       teamCode: number;
       elementType: 1 | 2 | 3 | 4;
@@ -75,6 +76,7 @@ interface AnalysisResponse {
     bench: Array<{
       webName: string;
       playerId: number;
+      code: number;
       teamShort: string;
       teamCode: number;
       elementType: 1 | 2 | 3 | 4;
@@ -317,10 +319,10 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabId)}>
         <TabsList className="hidden w-full justify-start md:flex">
           <TabsTrigger value="squad" className="font-display uppercase tracking-tight">Squad</TabsTrigger>
-          <TabsTrigger value="vs" className="font-display uppercase tracking-tight">VS</TabsTrigger>
-          <TabsTrigger value="coach" className="font-display uppercase tracking-tight">Coach</TabsTrigger>
+          <TabsTrigger value="vs" className="font-display uppercase tracking-tight">Rival</TabsTrigger>
+          <TabsTrigger value="coach" className="font-display uppercase tracking-tight">AI</TabsTrigger>
           <TabsTrigger value="matches" className="font-display uppercase tracking-tight">Matches</TabsTrigger>
-          <TabsTrigger value="collection" className="font-display uppercase tracking-tight">Collection</TabsTrigger>
+          <TabsTrigger value="collection" className="font-display uppercase tracking-tight">Draft</TabsTrigger>
         </TabsList>
 
         <TabsContent value="squad" className="mt-4 space-y-4">
@@ -382,31 +384,12 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
         <TabsContent value="coach" className="mt-4 space-y-6">
           <SectionNav
             sections={[
-              { id: "outlook", label: "Outlook" },
               { id: "projections", label: "Projections" },
               { id: "suggested", label: "Suggested" },
+              { id: "outlook", label: "Outlook" },
               { id: "chips", label: "Chips" },
             ]}
           />
-
-          <section id="outlook" className="space-y-2 scroll-mt-20">
-            <h2 className="font-display text-sm font-bold uppercase tracking-tight text-muted-foreground">Outlook</h2>
-            {data.horizon && data.teams ? (
-              <PlanPanel
-                horizon={data.horizon.horizon}
-                cumulative={data.horizon.cumulative}
-                context={ctx}
-                teams={data.teams}
-              />
-            ) : (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Plan horizon unavailable</CardTitle>
-                  <CardDescription>Refresh to compute the next 3 gameweeks.</CardDescription>
-                </CardHeader>
-              </Card>
-            )}
-          </section>
 
           <section id="projections" className="space-y-2 scroll-mt-20">
             <h2 className="font-display text-sm font-bold uppercase tracking-tight text-muted-foreground">Projections</h2>
@@ -455,6 +438,25 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
                 <CardContent>
                   <Button onClick={() => refetchAnalysis(false)}>Run analysis</Button>
                 </CardContent>
+              </Card>
+            )}
+          </section>
+
+          <section id="outlook" className="space-y-2 scroll-mt-20">
+            <h2 className="font-display text-sm font-bold uppercase tracking-tight text-muted-foreground">Outlook</h2>
+            {data.horizon && data.teams ? (
+              <PlanPanel
+                horizon={data.horizon.horizon}
+                cumulative={data.horizon.cumulative}
+                context={ctx}
+                teams={data.teams}
+              />
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Plan horizon unavailable</CardTitle>
+                  <CardDescription>Refresh to compute the next 3 gameweeks.</CardDescription>
+                </CardHeader>
               </Card>
             )}
           </section>

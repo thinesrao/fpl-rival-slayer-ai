@@ -18,6 +18,7 @@ function seasonOvr(seasonTotal: number): number {
 interface PlayerDetail {
   player: {
     id: number;
+    code: number;
     webName: string;
     fullName: string;
     teamShort: string;
@@ -189,10 +190,15 @@ function Header({
             ovr={ovr}
             position={data.player.position}
             name={data.player.webName}
-            sub={`${data.player.teamShort} · ${positionLabel(data.player.position)}`}
+            sub={positionLabel(data.player.position)}
+            photoCode={data.player.code}
+            teamCode={data.player.teamCode}
+            teamShort={data.player.teamShort}
             size="lg"
             stats={[
               { label: "PTS", value: data.season.totalPoints },
+              { label: "GLS", value: data.gwStats.goals },
+              { label: "AST", value: data.gwStats.assists },
               { label: "£M", value: data.season.pricePoundsMillions.toFixed(1) },
               { label: "OWN", value: `${data.season.ownedOverallPct.toFixed(0)}%` },
               { label: "STR", value: `${data.season.startsLeaguePct.toFixed(0)}%` },

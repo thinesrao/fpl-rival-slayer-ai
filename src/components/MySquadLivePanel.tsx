@@ -17,6 +17,7 @@ import { PointBubble } from "@/components/PointBubble";
 import { useCaptainConfetti } from "@/lib/use-captain-confetti";
 import { cn } from "@/lib/utils";
 import { FutCard } from "@/components/fut/FutCard";
+import { PitchBackdrop } from "@/components/fut/PitchBackdrop";
 import { type Tier } from "@/lib/fut/tier";
 
 /** Map a player's live points into the gold/silver/bronze tier band. */
@@ -28,6 +29,7 @@ function livePointsTier(points: number): Tier {
 
 interface LivePlayer {
   playerId: number;
+  code: number;
   webName: string;
   teamShort: string;
   teamCode: number;
@@ -184,16 +186,13 @@ export function MySquadLivePanel({ teamId, leagueId, refreshSignal = 0 }: Props)
         <MetricsHeader metrics={data.metrics} />
 
         <PitchTilt>
-          <div
-            className="relative overflow-hidden rounded-2xl border"
-            style={{ background: "linear-gradient(to bottom, hsl(120 55% 32%), hsl(120 50% 27%))" }}
-          >
-            <PitchLines />
-            <div className="relative flex flex-col gap-3 px-1 py-4 sm:gap-4 sm:px-2 sm:py-5">
-              <Row players={gk} onClick={onTileClick} />
-              <Row players={def} onClick={onTileClick} />
-              <Row players={mid} onClick={onTileClick} />
+          <div className="relative isolate overflow-hidden rounded-2xl border border-fut-gold/15">
+            <PitchBackdrop />
+            <div className="relative flex flex-col gap-3 px-1 py-5 sm:gap-4 sm:px-2 sm:py-6">
               <Row players={fwd} onClick={onTileClick} />
+              <Row players={mid} onClick={onTileClick} />
+              <Row players={def} onClick={onTileClick} />
+              <Row players={gk} onClick={onTileClick} />
             </div>
           </div>
         </PitchTilt>
@@ -283,17 +282,6 @@ function Sparkline({ points }: { points: number[] }) {
   );
 }
 
-function PitchLines() {
-  return (
-    <div className="pointer-events-none absolute inset-0">
-      <div className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2 bg-white/15" />
-      <div className="absolute left-1/2 top-1/2 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/15" />
-      <div className="absolute left-1/2 top-0 h-12 w-32 -translate-x-1/2 rounded-b-2xl border border-t-0 border-white/15" />
-      <div className="absolute bottom-0 left-1/2 h-12 w-32 -translate-x-1/2 rounded-t-2xl border border-b-0 border-white/15" />
-    </div>
-  );
-}
-
 function Row({ players, onClick }: { players: LivePlayer[]; onClick: (p: LivePlayer) => void }) {
   if (players.length === 0) return null;
   return (
@@ -335,9 +323,12 @@ function Tile({ player, onClick, small = false }: { player: LivePlayer; onClick:
           position={player.position}
           name={player.webName}
           sub={player.teamShort}
+          photoCode={player.code}
+          teamCode={player.teamCode}
+          teamShort={player.teamShort}
           captain={player.isCaptain}
           vice={!player.isCaptain && player.isVice}
-          size="sm"
+          size="xs"
           noShine
           onClick={onClick}
           className={cn(
