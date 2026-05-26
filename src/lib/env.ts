@@ -10,12 +10,22 @@ const schema = z.object({
   GEMINI_API_KEY: z.string().min(1).optional(),
   GEMINI_MODEL: z.string().default("gemini-2.5-pro"),
   FPL_USER_AGENT: z.string().default(CHROME_UA),
+  // When set, all FPL API requests route through this proxy instead of
+  // hitting fantasy.premierleague.com directly. Needed when the host's
+  // egress IP is on FPL's data-centre block list (e.g. Vercel on AWS).
+  // No trailing slash. The proxy must expose the same /api/* paths.
+  FPL_PROXY_URL: z.string().url().optional(),
+  // Shared secret sent as X-FPL-Proxy-Secret to the proxy; ignored when
+  // FPL_PROXY_URL is unset.
+  FPL_PROXY_SECRET: z.string().optional(),
 });
 
 const parsed = schema.safeParse({
   GEMINI_API_KEY: process.env.GEMINI_API_KEY,
   GEMINI_MODEL: process.env.GEMINI_MODEL,
   FPL_USER_AGENT: process.env.FPL_USER_AGENT,
+  FPL_PROXY_URL: process.env.FPL_PROXY_URL,
+  FPL_PROXY_SECRET: process.env.FPL_PROXY_SECRET,
 });
 
 if (!parsed.success) {
@@ -24,7 +34,13 @@ if (!parsed.success) {
 
 export const env = parsed.success
   ? parsed.data
-  : { GEMINI_API_KEY: undefined, GEMINI_MODEL: "gemini-2.5-pro", FPL_USER_AGENT: CHROME_UA };
+  : {
+      GEMINI_API_KEY: undefined,
+      GEMINI_MODEL: "gemini-2.5-pro",
+      FPL_USER_AGENT: CHROME_UA,
+      FPL_PROXY_URL: undefined,
+      FPL_PROXY_SECRET: undefined,
+    };
 
 export const aiEnabled = Boolean(env.GEMINI_API_KEY);
 

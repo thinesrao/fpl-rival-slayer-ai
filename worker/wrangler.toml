@@ -1,0 +1,7 @@
+name = "fpl-proxy"
+main = "fpl-proxy.ts"
+compatibility_date = "2025-10-01"
+
+# Optional: set a custom routes-based domain after deploy via:
+#   wrangler triggers deploy
+# For the *.workers.dev URL the defaults above are enough.
