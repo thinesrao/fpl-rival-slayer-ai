@@ -20,6 +20,7 @@ export type FixtureStatus = "upcoming" | "live" | "finished";
 
 export interface LivePlayer {
   playerId: number;
+  code: number; // FPL element.code — drives the PL CDN player-photo URL
   webName: string;
   teamShort: string;
   teamCode: number;
@@ -251,6 +252,7 @@ function resolvePicks(args: ResolvePicksArgs): { starters: LivePlayer[]; bench: 
 
     return {
       playerId: slot.player.id,
+      code: slot.player.code ?? 0,
       webName: slot.player.web_name,
       teamShort: team?.short_name ?? "?",
       teamCode: team?.code ?? 0,

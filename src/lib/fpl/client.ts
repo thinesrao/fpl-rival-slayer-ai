@@ -11,7 +11,12 @@ import type {
   FplPicksResponse,
 } from "@/lib/types";
 
-const BASE = "https://fantasy.premierleague.com/api";
+// Default to the canonical FPL API. When FPL_PROXY_URL is set, requests
+// instead go through that proxy (typically a Cloudflare Worker) so we can
+// dodge data-centre IP blocks.
+const BASE = env.FPL_PROXY_URL
+  ? `${env.FPL_PROXY_URL.replace(/\/$/, "")}/api`
+  : "https://fantasy.premierleague.com/api";
 
 type CacheOpts = { revalidate: number; tags?: string[] };
 
@@ -22,22 +27,28 @@ const CACHE_ELEMENT_SUMMARY: CacheOpts = { revalidate: 900, tags: ["fpl-element-
 // Browser-like headers — FPL's bot filter 403s anything that looks
 // like a generic HTTP client. Keep the set tight: UA + the common
 // browser navigation headers a Chrome request would include.
+// The proxy worker re-adds these on its end too; sending them here makes
+// the direct-mode (no proxy) path work for local dev.
 function fplHeaders(): HeadersInit {
-  return {
+  const h: Record<string, string> = {
     "User-Agent": env.FPL_USER_AGENT,
     Accept: "application/json, text/plain, */*",
     "Accept-Language": "en-GB,en;q=0.9",
     Referer: "https://fantasy.premierleague.com/",
     Origin: "https://fantasy.premierleague.com",
   };
+  if (env.FPL_PROXY_URL && env.FPL_PROXY_SECRET) {
+    h["X-FPL-Proxy-Secret"] = env.FPL_PROXY_SECRET;
+  }
+  return h;
 }
 
 function explain403(path: string, body: string): string {
-  return (
-    `FPL 403 ${path}: blocked by upstream bot filter. ` +
-    `Override FPL_USER_AGENT with a current Chrome UA, or check that the ` +
-    `host IP isn't on a known data-centre block list. Body: ${body.slice(0, 120)}`
-  );
+  const via = env.FPL_PROXY_URL ? ` via ${env.FPL_PROXY_URL}` : "";
+  const hint = env.FPL_PROXY_URL
+    ? `Check the worker logs (wrangler tail) — its egress IP may also be blocked, or FPL_PROXY_SECRET may be mismatched.`
+    : `Set FPL_PROXY_URL to a Cloudflare-Worker proxy (see worker/fpl-proxy.ts), or check that the host IP isn't on FPL's data-centre block list.`;
+  return `FPL 403 ${path}${via}: blocked by upstream bot filter. ${hint} Body: ${body.slice(0, 120)}`;
 }
 
 async function fplFetch<T>(path: string, cache: CacheOpts): Promise<T> {

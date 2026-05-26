@@ -75,8 +75,8 @@ export function RivalChipsPanel({ teamId, leagueId }: Props) {
     <div className="space-y-3">
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Shield className="h-4 w-4 text-primary" /> Chip wallet
+          <CardTitle className="flex items-center gap-2 font-display text-base uppercase tracking-tight">
+            <Shield className="h-4 w-4 text-fut-gold" /> Chip wallet
           </CardTitle>
           <CardDescription>
             What you and the rivals above you still have to play in the season. Hint heuristics look at the next 3 GWs for DGW/BGW pressure.
@@ -116,11 +116,16 @@ function ChipRow({
   const remainingSet = new Set(status.remaining);
   const risk = status.hintRisk;
   return (
-    <div className={cn("rounded-md border p-3", youOwn && "bg-primary/5 border-primary/40")}>
+    <div
+      className={cn(
+        "rounded-md border p-3",
+        youOwn && "border-fut-gold/40 bg-fut-gold/[0.06]",
+      )}
+    >
       <div className="flex items-start justify-between gap-2">
         <div>
-          <div className="text-sm font-semibold">{label}</div>
-          <div className="text-[11px] text-muted-foreground">{name}</div>
+          <div className="font-display text-sm font-bold uppercase tracking-tight">{label}</div>
+          <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{name}</div>
         </div>
         {activeChip && (
           <Badge variant="success" className="px-1.5 py-0 text-[10px]">
@@ -134,19 +139,18 @@ function ChipRow({
           const used = usedMap.has(chip);
           const remaining = remainingSet.has(chip);
           return (
-            <Badge
+            <span
               key={chip}
-              variant={remaining ? "outline" : "secondary"}
               title={used ? `Used GW${usedMap.get(chip)}` : "Remaining"}
               className={cn(
-                "px-1.5 py-0 text-[10px]",
-                used && "line-through opacity-50",
-                remaining && "border-emerald-500/40",
+                "inline-flex items-center rounded-sm border px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider",
+                remaining && "border-fut-gold/60 bg-fut-gold/10 text-fut-gold",
+                used && "border-fut-silver/40 text-fut-silver/60 line-through",
               )}
             >
               {CHIP_LABEL[chip]}
-              {used && <span className="ml-1 text-[9px]">GW{usedMap.get(chip)}</span>}
-            </Badge>
+              {used && <span className="ml-1 text-[9px] no-underline">GW{usedMap.get(chip)}</span>}
+            </span>
           );
         })}
       </div>

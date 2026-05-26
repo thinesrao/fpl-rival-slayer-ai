@@ -8,10 +8,17 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { FutCard } from "@/components/fut/FutCard";
+import { playerTier } from "@/lib/fut/tier";
+
+function seasonOvr(seasonTotal: number): number {
+  return Math.max(50, Math.min(99, 50 + Math.round(seasonTotal / 3)));
+}
 
 interface PlayerDetail {
   player: {
     id: number;
+    code: number;
     webName: string;
     fullName: string;
     teamShort: string;
@@ -61,11 +68,6 @@ interface Props {
   captainSwap?: CaptainSwapPreview | null;
 }
 
-const KIT_BASE = "https://fantasy.premierleague.com/dist/img/shirts/standard";
-function kitUrl(teamCode: number, isGk: boolean): string {
-  return `${KIT_BASE}/shirt_${teamCode}${isGk ? "_1" : ""}-66.png`;
-}
-
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   if (!res.ok) {
@@ -86,7 +88,6 @@ type Tab = "summary" | "previous" | "upcoming";
 
 export function PlayerDetailModal({ open, onClose, playerId, teamId, leagueId, captainSwap }: Props) {
   const [tab, setTab] = useState<Tab>("summary");
-  const [imgFailed, setImgFailed] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -99,7 +100,6 @@ export function PlayerDetailModal({ open, onClose, playerId, teamId, leagueId, c
 
   useEffect(() => {
     setTab("summary");
-    setImgFailed(false);
   }, [playerId]);
 
   const q = useQuery({
@@ -125,10 +125,8 @@ export function PlayerDetailModal({ open, onClose, playerId, teamId, leagueId, c
         className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl border bg-card shadow-2xl sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <Header data={q.data ?? null} loading={q.isLoading} imgFailed={imgFailed} setImgFailed={setImgFailed} onClose={onClose} />
+        <Header data={q.data ?? null} loading={q.isLoading} onClose={onClose} />
 
-        {/* Body */}
         <div className="flex-1 overflow-y-auto">
           {q.error ? (
             <div className="p-4">
@@ -164,45 +162,50 @@ export function PlayerDetailModal({ open, onClose, playerId, teamId, leagueId, c
 function Header({
   data,
   loading,
-  imgFailed,
-  setImgFailed,
   onClose,
 }: {
   data: PlayerDetail | null;
   loading: boolean;
-  imgFailed: boolean;
-  setImgFailed: (v: boolean) => void;
   onClose: () => void;
 }) {
+  const ovr = data ? seasonOvr(data.season.totalPoints) : 50;
+  const tier = playerTier(ovr);
   return (
-    <div className="flex items-center gap-3 border-b bg-slate-900 px-4 py-3 text-white">
-      <div className="h-10 w-10 shrink-0">
-        {data && !imgFailed && data.player.teamCode > 0 ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={kitUrl(data.player.teamCode, data.player.elementType === 1)}
-            alt={`${data.player.teamShort} kit`}
-            className="h-full w-full object-contain drop-shadow"
-            onError={() => setImgFailed(true)}
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center rounded-md bg-white/10 text-[10px] font-bold">
-            {data?.player.teamShort ?? "—"}
-          </div>
-        )}
-      </div>
-      <div className="flex-1 min-w-0">
-        {loading || !data ? (
-          <Skeleton className="h-6 w-48" />
-        ) : (
-          <h2 className="truncate text-lg font-semibold">
-            {data.player.webName} <span className="font-normal text-white/70">({data.player.teamShort}) ({positionLabel(data.player.position)})</span>
-          </h2>
-        )}
-      </div>
-      <Button variant="ghost" size="sm" aria-label="Close" onClick={onClose} className="h-8 w-8 rounded-full bg-white/10 text-white hover:bg-white/20">
+    <div className="relative border-b bg-zinc-950 px-4 py-4">
+      <Button
+        variant="ghost"
+        size="sm"
+        aria-label="Close"
+        onClick={onClose}
+        className="absolute right-3 top-3 z-10 h-8 w-8 rounded-full bg-white/10 text-white hover:bg-white/20"
+      >
         <X className="h-4 w-4" />
       </Button>
+      <div className="flex items-center justify-center">
+        {loading || !data ? (
+          <Skeleton className="aspect-[5/7] w-44" />
+        ) : (
+          <FutCard
+            tier={tier}
+            ovr={ovr}
+            position={data.player.position}
+            name={data.player.webName}
+            sub={positionLabel(data.player.position)}
+            photoCode={data.player.code}
+            teamCode={data.player.teamCode}
+            teamShort={data.player.teamShort}
+            size="lg"
+            stats={[
+              { label: "PTS", value: data.season.totalPoints },
+              { label: "GLS", value: data.gwStats.goals },
+              { label: "AST", value: data.gwStats.assists },
+              { label: "£M", value: data.season.pricePoundsMillions.toFixed(1) },
+              { label: "OWN", value: `${data.season.ownedOverallPct.toFixed(0)}%` },
+              { label: "STR", value: `${data.season.startsLeaguePct.toFixed(0)}%` },
+            ]}
+          />
+        )}
+      </div>
     </div>
   );
 }

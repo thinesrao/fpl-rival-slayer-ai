@@ -4,8 +4,9 @@ import { useState } from "react";
 import type { ManagerSquad, PlayerProjection, Position, SquadProjection, SquadSlot } from "@/lib/types";
 import type { PlayerEo } from "@/lib/intel/effective-ownership";
 import { Badge } from "@/components/ui/badge";
-import { PlayerPhoto } from "@/components/PlayerPhoto";
 import { cn } from "@/lib/utils";
+import { OvrBadge } from "@/components/fut/OvrBadge";
+import { playerOvr, playerTier } from "@/lib/fut/tier";
 
 const POSITIONS: Position[] = ["GKP", "DEF", "MID", "FWD"];
 
@@ -70,18 +71,19 @@ function PlayerSide({
   onClick?: () => void;
 }) {
   if (!slot) {
-    return <div className="min-h-[52px] p-2 text-xs text-muted-foreground/40">—</div>;
+    return <div className="min-h-[56px] p-2 text-xs text-muted-foreground/40">—</div>;
   }
   const benched = slot.pick.multiplier === 0;
   const bg = {
-    advantage: "bg-success/10",
+    advantage: "bg-fut-gold/[0.07]",
     threat: "bg-destructive/10",
     shared: "",
     none: "",
   }[highlight];
-  // EO badge tone: green when truly differential (≤25%), amber when template (≥75%).
   const eoTone =
     !eo ? null : eo.eoPct >= 75 ? "warning" : eo.eoPct <= 25 ? "success" : "outline";
+  const ovr = proj ? playerOvr(proj.xPoints) : 50;
+  const tier = playerTier(ovr);
   const Tag = onClick ? "button" : "div";
   return (
     <Tag
@@ -93,22 +95,18 @@ function PlayerSide({
           }
         : {})}
       className={cn(
-        "flex min-h-[52px] w-full items-center gap-2 p-2 text-left",
+        "flex min-h-[56px] w-full items-center gap-2 p-2 text-left",
         benched && "opacity-60",
         bg,
-        onClick && "cursor-pointer hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+        onClick && "cursor-pointer hover:bg-fut-gold/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
       )}
     >
-      <PlayerPhoto
-        code={slot.player.code}
-        name={slot.player.web_name}
-        difficulty={proj?.fixtureDifficulty}
-        chanceOfPlaying={slot.player.chance_of_playing_next_round}
-        size="sm"
-      />
+      <OvrBadge tier={tier} ovr={ovr} size="md" />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <div className="flex flex-wrap items-center gap-1">
-          <span className="truncate text-sm font-medium leading-tight">{slot.player.web_name}</span>
+          <span className="truncate font-display text-sm font-bold uppercase tracking-tight leading-tight">
+            {slot.player.web_name}
+          </span>
           {slot.pick.is_captain && (
             <Badge variant="success" className="px-1 py-0 text-[10px] leading-none">C</Badge>
           )}
@@ -116,15 +114,15 @@ function PlayerSide({
             <Badge variant="secondary" className="px-1 py-0 text-[10px] leading-none">V</Badge>
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
           <span>{slot.team.short_name}</span>
-          {proj && <span className="font-mono">xP {proj.xPoints.toFixed(1)}</span>}
+          {proj && <span>xP {proj.xPoints.toFixed(1)}</span>}
           {eoTone && (
             <Badge variant={eoTone} className="px-1 py-0 text-[9px] leading-none">
               EO {eo!.eoPct.toFixed(0)}%
             </Badge>
           )}
-          {benched && <span className="text-[10px] uppercase">bench</span>}
+          {benched && <span>bench</span>}
           {proj && proj.injuryRisk >= 0.4 && (
             <Badge variant="destructive" className="px-1 py-0 text-[9px] leading-none">
               {Math.round(proj.injuryRisk * 100)}% inj

@@ -227,6 +227,7 @@ export function DraftEditor({ teamId, initial, onClose, onSaved }: Props) {
       return {
         webName: p.webName,
         playerId: p.id,
+        code: p.code,
         teamShort: p.team,
         teamCode: p.teamCode,
         elementType: positionToElementType(p.position),

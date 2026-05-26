@@ -103,8 +103,8 @@ export function DraftsPanel({ teamId }: Props) {
     <Card>
       <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
         <div>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <ClipboardList className="h-4 w-4 text-primary" /> Squad drafts
+          <CardTitle className="flex items-center gap-2 font-display text-base uppercase tracking-tight">
+            <ClipboardList className="h-4 w-4 text-fut-gold" /> Draft
           </CardTitle>
           <CardDescription>
             Each new draft starts from your current squad and bank balance. Make transfers, change

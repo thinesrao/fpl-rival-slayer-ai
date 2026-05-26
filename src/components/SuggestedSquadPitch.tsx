@@ -1,13 +1,16 @@
 "use client";
 
-import { useState } from "react";
 import { ArrowLeftRight, Sparkles, Wallet } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { FutCard } from "@/components/fut/FutCard";
+import { PitchBackdrop } from "@/components/fut/PitchBackdrop";
+import { playerOvr, playerTier } from "@/lib/fut/tier";
 
 interface ResolvedPlayer {
   webName: string;
   playerId: number;
+  code: number; // FPL element.code — drives the PL CDN photo URL (0 = unknown)
   teamShort: string;
   teamCode: number;
   elementType: 1 | 2 | 3 | 4;
@@ -51,12 +54,6 @@ interface Props {
   highlight?: (playerId: number) => "captain" | "vice" | null;
 }
 
-const KIT_BASE = "https://fantasy.premierleague.com/dist/img/shirts/standard";
-
-function kitUrl(teamCode: number, isGk: boolean): string {
-  return `${KIT_BASE}/shirt_${teamCode}${isGk ? "_1" : ""}-66.png`;
-}
-
 export function SuggestedSquadPitch({
   suggested,
   onTileClick,
@@ -83,20 +80,14 @@ export function SuggestedSquadPitch({
         />
       )}
 
-      <div
-        className="relative overflow-hidden rounded-2xl border"
-        style={{
-          background:
-            "linear-gradient(to bottom, hsl(120 55% 32%), hsl(120 50% 27%))",
-        }}
-      >
-        <PitchLines />
+      <div className="relative isolate overflow-hidden rounded-2xl border border-fut-gold/15">
+        <PitchBackdrop />
 
-        <div className="relative flex flex-col gap-3 px-1 py-4 sm:gap-4 sm:px-2 sm:py-5">
-          <Row players={gk} onTileClick={onTileClick} bottomMode={bottomMode} registerAnchor={registerAnchor} highlight={highlight} />
-          <Row players={def} onTileClick={onTileClick} bottomMode={bottomMode} registerAnchor={registerAnchor} highlight={highlight} />
-          <Row players={mid} onTileClick={onTileClick} bottomMode={bottomMode} registerAnchor={registerAnchor} highlight={highlight} />
+        <div className="relative flex flex-col gap-3 px-1 py-5 sm:gap-4 sm:px-2 sm:py-6">
           <Row players={fwd} onTileClick={onTileClick} bottomMode={bottomMode} registerAnchor={registerAnchor} highlight={highlight} />
+          <Row players={mid} onTileClick={onTileClick} bottomMode={bottomMode} registerAnchor={registerAnchor} highlight={highlight} />
+          <Row players={def} onTileClick={onTileClick} bottomMode={bottomMode} registerAnchor={registerAnchor} highlight={highlight} />
+          <Row players={gk} onTileClick={onTileClick} bottomMode={bottomMode} registerAnchor={registerAnchor} highlight={highlight} />
         </div>
       </div>
 
@@ -143,18 +134,6 @@ function Header({
   );
 }
 
-function PitchLines() {
-  // Pure-CSS field markings: centre line + circle, two penalty-area arcs.
-  return (
-    <div className="pointer-events-none absolute inset-0">
-      <div className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2 bg-white/15" />
-      <div className="absolute left-1/2 top-1/2 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/15" />
-      <div className="absolute left-1/2 top-0 h-12 w-32 -translate-x-1/2 rounded-b-2xl border border-t-0 border-white/15" />
-      <div className="absolute bottom-0 left-1/2 h-12 w-32 -translate-x-1/2 rounded-t-2xl border border-b-0 border-white/15" />
-    </div>
-  );
-}
-
 interface RowProps {
   players: ResolvedPlayer[];
   onTileClick?: (id: number, name: string) => void;
@@ -191,96 +170,56 @@ interface TileProps {
 }
 
 function Tile({ player, onClick, small = false, bottomMode, registerAnchor, highlight }: TileProps) {
-  const isGk = player.elementType === 1;
-  const [imgFailed, setImgFailed] = useState(false);
   const clickable = !!onClick && player.playerId > 0;
-  const Tag = clickable ? "button" : "div";
+  const ovr = playerOvr(player.xPoints);
+  const tier = playerTier(ovr);
+  const sub =
+    bottomMode === "price"
+      ? `£${(player.cost / 10).toFixed(1)} · ${player.teamShort}`
+      : `${player.opponent ?? "BLANK"} · ${player.xPoints.toFixed(1)}xP`;
   const hoverGold = highlight === "captain";
   const hoverSilver = highlight === "vice";
+
   return (
-    <Tag
-      type={clickable ? "button" : undefined}
-      onClick={clickable ? () => onClick!(player.playerId, player.webName) : undefined}
-      title={clickable ? player.webName : player.webName}
+    <div
+      ref={(el) => {
+        if (!registerAnchor) return;
+        registerAnchor(player.playerId, el);
+      }}
       className={cn(
-        "relative flex min-w-0 flex-1 basis-0 flex-col items-center gap-0.5 rounded-md transition-all",
-        small ? "max-w-[78px]" : "max-w-[88px]",
-        clickable && "cursor-pointer hover:scale-[1.05] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white",
-        hoverGold && "scale-[1.08] ring-2 ring-amber-300",
-        hoverSilver && "scale-[1.08] ring-2 ring-slate-200",
+        "relative flex min-w-0 flex-1 basis-0 flex-col items-center transition-all",
+        small ? "max-w-[72px]" : "max-w-[88px]",
+        hoverGold && "scale-[1.08] z-10",
+        hoverSilver && "scale-[1.08] z-10",
       )}
     >
-      <div
-        ref={(el) => {
-          if (!registerAnchor) return;
-          registerAnchor(player.playerId, el);
-        }}
-        className="relative h-9 w-9 sm:h-11 sm:w-11"
-      >
-        {imgFailed || player.teamCode === 0 ? (
-          <div
-            className="flex h-full w-full items-center justify-center rounded-md bg-white/85 text-[10px] font-bold text-slate-900"
-            aria-hidden
-          >
-            {player.teamShort}
-          </div>
-        ) : (
-          // FPL CDN kit assets — small, cached, no need for next/image optimization.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={kitUrl(player.teamCode, isGk)}
-            alt={`${player.teamShort} kit`}
-            loading="lazy"
-            onError={() => setImgFailed(true)}
-            className="h-full w-full object-contain drop-shadow"
-          />
-        )}
-        {player.isCaptain && (
-          <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-amber-400 text-[9px] font-bold text-amber-950 shadow">
-            C
-          </span>
-        )}
-        {!player.isCaptain && player.isVice && (
-          <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-slate-200 text-[9px] font-bold text-slate-900 shadow">
-            V
-          </span>
-        )}
-      </div>
-      <div
+      <FutCard
+        tier={tier}
+        ovr={ovr}
+        position={player.position}
+        name={player.webName}
+        sub={sub}
+        photoCode={player.code}
+        teamCode={player.teamCode}
+        teamShort={player.teamShort}
+        captain={player.isCaptain}
+        vice={!player.isCaptain && player.isVice}
+        size="xs"
+        noShine
+        onClick={clickable ? () => onClick!(player.playerId, player.webName) : undefined}
         className={cn(
-          "w-full overflow-hidden rounded-sm bg-white/95 px-1 py-0.5 text-center leading-tight shadow",
-          player.isIn && "ring-1 ring-emerald-400",
+          "!w-full",
+          player.isIn && "ring-2 ring-emerald-400 ring-offset-1 ring-offset-transparent",
+          hoverGold && "ring-2 ring-amber-300 ring-offset-1 ring-offset-transparent",
+          hoverSilver && "ring-2 ring-slate-200 ring-offset-1 ring-offset-transparent",
         )}
-      >
-        <div className={cn("truncate font-semibold text-slate-900", small ? "text-[10px]" : "text-[11px]")}>
-          {player.webName}
-        </div>
-        {bottomMode === "price" ? (
-          <>
-            <div className={cn("truncate text-slate-600", small ? "text-[9px]" : "text-[9px] sm:text-[10px]")}>
-              {player.opponent ?? player.teamShort}
-            </div>
-            <div className={cn("font-mono font-semibold text-emerald-700", small ? "text-[10px]" : "text-[10px] sm:text-[11px]")}>
-              £{(player.cost / 10).toFixed(1)}
-            </div>
-          </>
-        ) : (
-          <>
-            <div className={cn("truncate text-slate-600", small ? "text-[9px]" : "text-[9px] sm:text-[10px]")}>
-              {player.opponent ?? "BLANK"}
-            </div>
-            <div className={cn("font-mono font-semibold text-emerald-700", small ? "text-[10px]" : "text-[10px] sm:text-[11px]")}>
-              {player.xPoints.toFixed(1)} xP
-            </div>
-          </>
-        )}
-      </div>
+      />
       {player.isIn && (
-        <span className="absolute -left-1 top-0 rounded bg-emerald-500 px-1 py-0.5 text-[8px] font-bold text-white shadow">
+        <span className="absolute -left-1 top-0 z-20 rounded bg-emerald-500 px-1 py-0.5 text-[8px] font-bold text-white shadow">
           IN
         </span>
       )}
-    </Tag>
+    </div>
   );
 }
 

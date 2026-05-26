@@ -57,7 +57,7 @@ export function FloatingChat({ teamId, leagueId, hidden = false }: Props) {
             "flex items-start gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300",
           )}
         >
-          <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+          <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-fut-gold" />
           <p className="flex-1 text-xs leading-tight">
             Ask the co-pilot anything about your team, captain, or transfers.
           </p>
@@ -86,10 +86,10 @@ export function FloatingChat({ teamId, leagueId, hidden = false }: Props) {
         }}
         aria-label="Open co-pilot chat"
         className={cn(
-          "fixed right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-2xl",
+          "fixed right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-tier-gold text-zinc-900 shadow-fut-gold",
           "bottom-[calc(env(safe-area-inset-bottom)+5rem)] md:bottom-6 md:right-6",
           "transition-transform hover:scale-105 active:scale-95",
-          "ring-4 ring-primary/20",
+          "ring-4 ring-fut-gold/20",
         )}
       >
         <MessageSquare className="h-6 w-6" />
@@ -117,8 +117,10 @@ export function FloatingChat({ teamId, leagueId, hidden = false }: Props) {
           >
             <div className="flex items-center justify-between border-b px-4 py-3">
               <div className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-primary" />
-                <h2 className="text-base font-semibold">Co-pilot chat</h2>
+                <Sparkles className="h-4 w-4 text-fut-gold" />
+                <h2 className="font-display text-base font-bold uppercase tracking-tight">
+                  AI
+                </h2>
               </div>
               <button
                 type="button"

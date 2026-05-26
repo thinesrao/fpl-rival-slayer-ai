@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, RefreshCcw } from "lucide-react";
 import { LeagueSwitcher } from "@/components/LeagueSwitcher";
 import { LogoutButton } from "@/components/LogoutButton";
+import { FutCardCompact } from "@/components/fut/FutCardCompact";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -60,6 +61,7 @@ interface AnalysisResponse {
     startingXi: Array<{
       webName: string;
       playerId: number;
+      code: number;
       teamShort: string;
       teamCode: number;
       elementType: 1 | 2 | 3 | 4;
@@ -74,6 +76,7 @@ interface AnalysisResponse {
     bench: Array<{
       webName: string;
       playerId: number;
+      code: number;
       teamShort: string;
       teamCode: number;
       elementType: 1 | 2 | 3 | 4;
@@ -203,7 +206,7 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
 
   const [refreshSignal, setRefreshSignal] = useState(0);
   const [whatIfOutId, setWhatIfOutId] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<TabId>("pitch");
+  const [activeTab, setActiveTab] = useState<TabId>("squad");
 
   const refreshAll = async () => {
     setRefreshingAll(true);
@@ -261,18 +264,32 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
   return (
     <div className="container mx-auto px-4 py-4 pb-24 md:py-6 md:pb-6">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3 md:mb-6">
-        <div>
-          <Link href="/" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+        <div className="min-w-0 flex-1">
+          <Link href="/" className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:text-foreground">
             <ArrowLeft className="h-3 w-3" /> New search
           </Link>
-          <h1 className="mt-1 text-lg font-bold sm:text-2xl">{ctx.leagueName}</h1>
-          <p className="text-xs text-muted-foreground sm:text-sm">
-            You: <span className="font-medium text-foreground">{ctx.user.entry.name}</span> · rank{" "}
-            <span className="font-medium text-foreground">#{ctx.user.entry.rank}</span> ·{" "}
-            <span className="inline-flex items-baseline align-baseline font-medium text-foreground">
-              <Odometer value={ctx.user.entry.total} minDigits={4} height={18} />
-            </span> pts
-          </p>
+          <h1 className="mt-1 font-display text-lg font-extrabold uppercase tracking-tight sm:text-2xl">
+            {ctx.leagueName}
+          </h1>
+          <div className="mt-2 max-w-md">
+            <FutCardCompact
+              tier="gold"
+              ovr={Math.max(60, Math.min(95, 100 - (ctx.user.entry.rank - 1) * 2))}
+              position="MGR"
+              name={ctx.user.entry.name}
+              sub={`Rank #${ctx.user.entry.rank}`}
+              trailing={
+                <div className="text-right">
+                  <span className="inline-flex items-baseline font-display text-lg font-extrabold tabular-nums leading-none">
+                    <Odometer value={ctx.user.entry.total} minDigits={4} height={20} />
+                  </span>
+                  <div className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+                    season pts
+                  </div>
+                </div>
+              }
+            />
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           <NotificationToggle teamId={teamId} />
@@ -301,14 +318,14 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabId)}>
         <TabsList className="hidden w-full justify-start md:flex">
-          <TabsTrigger value="pitch">Pitch</TabsTrigger>
-          <TabsTrigger value="matches">Matches</TabsTrigger>
-          <TabsTrigger value="rivals">Rivals</TabsTrigger>
-          <TabsTrigger value="plan">Plan</TabsTrigger>
-          <TabsTrigger value="drafts">Drafts</TabsTrigger>
+          <TabsTrigger value="squad" className="font-display uppercase tracking-tight">Squad</TabsTrigger>
+          <TabsTrigger value="vs" className="font-display uppercase tracking-tight">Rival</TabsTrigger>
+          <TabsTrigger value="coach" className="font-display uppercase tracking-tight">AI</TabsTrigger>
+          <TabsTrigger value="matches" className="font-display uppercase tracking-tight">Matches</TabsTrigger>
+          <TabsTrigger value="collection" className="font-display uppercase tracking-tight">Draft</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="pitch" className="mt-4 space-y-4">
+        <TabsContent value="squad" className="mt-4 space-y-4">
           {closestRival && (
             <div className="grid grid-cols-3 gap-2 sm:gap-3">
               <Stat
@@ -364,42 +381,23 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
           </details>
         </TabsContent>
 
-        <TabsContent value="plan" className="mt-4 space-y-6">
+        <TabsContent value="coach" className="mt-4 space-y-6">
           <SectionNav
             sections={[
-              { id: "outlook", label: "Outlook" },
               { id: "projections", label: "Projections" },
               { id: "suggested", label: "Suggested" },
+              { id: "outlook", label: "Outlook" },
               { id: "chips", label: "Chips" },
             ]}
           />
 
-          <section id="outlook" className="space-y-2 scroll-mt-20">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Outlook</h2>
-            {data.horizon && data.teams ? (
-              <PlanPanel
-                horizon={data.horizon.horizon}
-                cumulative={data.horizon.cumulative}
-                context={ctx}
-                teams={data.teams}
-              />
-            ) : (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Plan horizon unavailable</CardTitle>
-                  <CardDescription>Refresh to compute the next 3 gameweeks.</CardDescription>
-                </CardHeader>
-              </Card>
-            )}
-          </section>
-
           <section id="projections" className="space-y-2 scroll-mt-20">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Projections</h2>
+            <h2 className="font-display text-sm font-bold uppercase tracking-tight text-muted-foreground">Projections</h2>
             <OvertakeMeter odds={projections.overtake} />
           </section>
 
           <section id="suggested" className="space-y-2 scroll-mt-20">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Suggested moves</h2>
+            <h2 className="font-display text-sm font-bold uppercase tracking-tight text-muted-foreground">Suggested moves</h2>
             {!aiEnabled ? (
               <Alert variant="warning">
                 <AlertTitle>AI Coach disabled</AlertTitle>
@@ -444,8 +442,27 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
             )}
           </section>
 
+          <section id="outlook" className="space-y-2 scroll-mt-20">
+            <h2 className="font-display text-sm font-bold uppercase tracking-tight text-muted-foreground">Outlook</h2>
+            {data.horizon && data.teams ? (
+              <PlanPanel
+                horizon={data.horizon.horizon}
+                cumulative={data.horizon.cumulative}
+                context={ctx}
+                teams={data.teams}
+              />
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Plan horizon unavailable</CardTitle>
+                  <CardDescription>Refresh to compute the next 3 gameweeks.</CardDescription>
+                </CardHeader>
+              </Card>
+            )}
+          </section>
+
           <section id="chips" className="space-y-2 scroll-mt-20">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Chip timing</h2>
+            <h2 className="font-display text-sm font-bold uppercase tracking-tight text-muted-foreground">Chip timing</h2>
             <RivalChipsPanel teamId={teamId} leagueId={leagueId} />
           </section>
         </TabsContent>
@@ -454,7 +471,7 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
           <MatchesPanel teamId={teamId} leagueId={leagueId} refreshSignal={refreshSignal} />
         </TabsContent>
 
-        <TabsContent value="rivals" className="mt-4 space-y-6">
+        <TabsContent value="vs" className="mt-4 space-y-6">
           <SectionNav
             sections={[
               { id: "live", label: "Live" },
@@ -466,12 +483,12 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
           />
 
           <section id="live" className="space-y-2 scroll-mt-20">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Live</h2>
+            <h2 className="font-display text-sm font-bold uppercase tracking-tight text-muted-foreground">Live</h2>
             <LivePanel teamId={teamId} leagueId={leagueId} refreshSignal={refreshSignal} />
           </section>
 
           <section id="squad" className="space-y-2 scroll-mt-20">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Squad comparison</h2>
+            <h2 className="font-display text-sm font-bold uppercase tracking-tight text-muted-foreground">Squad comparison</h2>
             <p className="text-xs text-muted-foreground">
               Tap any of your players to run a what-if swap simulation.
             </p>
@@ -486,7 +503,7 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
           </section>
 
           <section id="diff" className="space-y-2 scroll-mt-20">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Differentials</h2>
+            <h2 className="font-display text-sm font-bold uppercase tracking-tight text-muted-foreground">Differentials</h2>
             {analysisQuery.isLoading && aiEnabled ? (
               <Skeleton className="h-40 w-full" />
             ) : (
@@ -495,19 +512,19 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
           </section>
 
           <section id="heatmap" className="space-y-2 scroll-mt-20">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">League ownership</h2>
+            <h2 className="font-display text-sm font-bold uppercase tracking-tight text-muted-foreground">League ownership</h2>
             <LeagueHeatmap leagueId={leagueId} topN={10} />
           </section>
 
           {eo && priceMoves && (
             <section id="intel" className="space-y-2 scroll-mt-20">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Intel</h2>
+              <h2 className="font-display text-sm font-bold uppercase tracking-tight text-muted-foreground">Intel</h2>
               <IntelPanel eo={eo} priceMoves={priceMoves} />
             </section>
           )}
         </TabsContent>
 
-        <TabsContent value="drafts" className="mt-4 space-y-4">
+        <TabsContent value="collection" className="mt-4 space-y-4">
           <DraftsPanel teamId={teamId} />
         </TabsContent>
       </Tabs>

@@ -4,52 +4,64 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 142 76% 36%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --success: 142 76% 36%;
-    --success-foreground: 0 0% 100%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 142 76% 36%;
-    --radius: 0.6rem;
+    --background: 220 25% 4%;
+    --foreground: 40 15% 96%;
+    --card: 220 22% 8%;
+    --card-foreground: 40 15% 96%;
+    --card-edge: 220 18% 14%;
+    --popover: 220 22% 8%;
+    --popover-foreground: 40 15% 96%;
+    --primary: 43 96% 56%;
+    --primary-foreground: 32 81% 12%;
+    --secondary: 220 18% 14%;
+    --secondary-foreground: 40 15% 96%;
+    --muted: 220 16% 12%;
+    --muted-foreground: 220 8% 62%;
+    --accent: 43 96% 56%;
+    --accent-foreground: 32 81% 12%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 40 15% 96%;
+    --success: 142 71% 45%;
+    --success-foreground: 222 47% 11%;
+    --border: 220 14% 16%;
+    --input: 220 14% 16%;
+    --ring: 43 96% 56%;
+    --radius: 0.75rem;
+
+    --fut-gold: 43 96% 56%;
+    --fut-gold-mid: 38 92% 50%;
+    --fut-gold-deep: 32 81% 35%;
+    --fut-silver: 220 6% 78%;
+    --fut-silver-mid: 220 7% 55%;
+    --fut-silver-deep: 220 9% 30%;
+    --fut-bronze: 20 70% 55%;
+    --fut-bronze-mid: 20 60% 40%;
+    --fut-bronze-deep: 20 50% 24%;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 47% 8%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 142 71% 45%;
-    --primary-foreground: 222.2 47% 11%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 50%;
-    --destructive-foreground: 210 40% 98%;
+    --background: 220 25% 4%;
+    --foreground: 40 15% 96%;
+    --card: 220 22% 8%;
+    --card-foreground: 40 15% 96%;
+    --card-edge: 220 18% 14%;
+    --popover: 220 22% 8%;
+    --popover-foreground: 40 15% 96%;
+    --primary: 43 96% 56%;
+    --primary-foreground: 32 81% 12%;
+    --secondary: 220 18% 14%;
+    --secondary-foreground: 40 15% 96%;
+    --muted: 220 16% 12%;
+    --muted-foreground: 220 8% 62%;
+    --accent: 43 96% 56%;
+    --accent-foreground: 32 81% 12%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 40 15% 96%;
     --success: 142 71% 45%;
-    --success-foreground: 222.2 47% 11%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 142 71% 45%;
+    --success-foreground: 222 47% 11%;
+    --border: 220 14% 16%;
+    --input: 220 14% 16%;
+    --ring: 43 96% 56%;
   }
 }
 
@@ -57,6 +69,11 @@
   * { @apply border-border; }
   body {
     @apply bg-background text-foreground;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% 18%, hsl(120 30% 12% / 0.45), transparent 70%),
+      radial-gradient(ellipse 60% 40% at 50% 100%, hsl(43 96% 56% / 0.04), transparent 70%);
+    background-attachment: fixed;
+    font-family: var(--font-sans), system-ui, sans-serif;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
@@ -73,4 +90,36 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .streak-flame { animation: none; }
+}
+
+/* Holographic shine — diagonal stripe overlay that sweeps across a card. */
+@keyframes holo-shine {
+  0%   { transform: translateX(-120%) skewX(-12deg); }
+  100% { transform: translateX(220%)  skewX(-12deg); }
+}
+.holo-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  border-radius: inherit;
+}
+.holo-overlay::before {
+  content: "";
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  width: 35%;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.06) 35%,
+    rgba(255, 255, 255, 0.18) 50%,
+    rgba(255, 255, 255, 0.06) 65%,
+    transparent 100%
+  );
+  animation: holo-shine 2.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .holo-overlay::before { animation: none; opacity: 0; }
 }
