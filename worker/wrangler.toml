@@ -2,6 +2,10 @@ name = "fpl-proxy"
 main = "fpl-proxy.ts"
 compatibility_date = "2025-10-01"
 
-# Optional: set a custom routes-based domain after deploy via:
-#   wrangler triggers deploy
-# For the *.workers.dev URL the defaults above are enough.
+# Serve the worker on a stable subdomain of your own zone instead of the
+# default fpl-proxy.<subdomain>.workers.dev. On first deploy wrangler will
+# create the DNS record and the route automatically.
+# (zone_name + custom_domain = true is the documented "Custom Domain" flow.)
+routes = [
+  { pattern = "fpl-proxy.myexperimentsite.online", zone_name = "myexperimentsite.online", custom_domain = true }
+]

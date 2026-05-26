@@ -12,12 +12,14 @@
 // Deploy:
 //   1. npm i -g wrangler && wrangler login
 //   2. cd worker && wrangler deploy
-//   3. (Optional but recommended) wrangler secret put FPL_PROXY_SECRET
-//      Pick any random string. Then set the *same* string as a
-//      Vercel env var named FPL_PROXY_SECRET so the Next.js app
-//      can authenticate to the worker.
-//   4. Set FPL_PROXY_URL in Vercel to the worker URL (no trailing slash),
-//      e.g. https://fpl-proxy.your-name.workers.dev
+//      (wrangler.toml binds this to fpl-proxy.myexperimentsite.online;
+//       the DNS record + route are auto-created on first deploy.)
+//   3. wrangler secret put FPL_PROXY_SECRET
+//      Pick any random string (e.g. `openssl rand -hex 24`). Then set the
+//      *same* string as a Vercel env var named FPL_PROXY_SECRET so the
+//      Next.js app can authenticate to the worker.
+//   4. Set FPL_PROXY_URL in Vercel to:
+//      https://fpl-proxy.myexperimentsite.online
 //
 // Security: with FPL_PROXY_SECRET set, the worker rejects requests that
 // don't carry the matching X-FPL-Proxy-Secret header, so randoms can't
