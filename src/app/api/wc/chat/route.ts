@@ -13,7 +13,7 @@ import { wcChatStream, type WcChatMessage } from "@/lib/wc/ai/chat";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const Body = z.object({
   message: z.string().min(1).max(2000),

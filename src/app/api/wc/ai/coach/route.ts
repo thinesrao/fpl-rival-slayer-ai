@@ -12,7 +12,8 @@ import { runCoach, type CoachResult } from "@/lib/wc/ai/coach";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+// Grounded coach call mirrors the draft flow's latency profile.
+export const maxDuration = 300;
 
 const Body = z.object({
   uid: z.string().min(1).max(64),

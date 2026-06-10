@@ -9,7 +9,9 @@ import { runAiDraft, type DraftResult } from "@/lib/wc/ai/draft";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+// Grounded Gemini 2.5 Pro draft review takes 50-90s; Fluid Compute allows
+// up to 300s even on Hobby.
+export const maxDuration = 300;
 
 const CACHE_KEY = "wc:ai:draft:v1";
 const CACHE_TTL = 30 * 60;
