@@ -54,6 +54,13 @@ const config: Config = {
           DEFAULT: "hsl(var(--success))",
           foreground: "hsl(var(--success-foreground))",
         },
+        // FIFA World Cup 2026 tri-host brand (Canada red / Mexico green / USA blue)
+        wc: {
+          red: "#C8102E",
+          green: "#00843D",
+          blue: "#0033A0",
+          purple: "#5B2D8E",
+        },
         fut: {
           gold: "hsl(var(--fut-gold))",
           "gold-mid": "hsl(var(--fut-gold-mid))",
@@ -75,6 +82,10 @@ const config: Config = {
           "linear-gradient(145deg, hsl(var(--fut-bronze)) 0%, hsl(var(--fut-bronze-mid)) 45%, hsl(var(--fut-bronze-deep)) 100%)",
         "holo-stripes":
           "repeating-linear-gradient(45deg, rgba(255,255,255,0.05) 0 6px, transparent 6px 14px)",
+        "wc-hero":
+          "linear-gradient(135deg, #0033A0 0%, #5B2D8E 35%, #C8102E 70%, #7A1B45 100%)",
+        "wc-stripe":
+          "linear-gradient(90deg, #C8102E 0%, #C8102E 33%, #00843D 33%, #00843D 66%, #0033A0 66%, #0033A0 100%)",
       },
       boxShadow: {
         "fut-gold":

@@ -9,6 +9,17 @@ Drop in your **FPL Team ID** and **Mini-League ID** and get:
 - **Overtake probability** for each rival from a Monte-Carlo simulation of the upcoming gameweek.
 - An **AI strategist** (Google Gemini with Google Search grounding) that reads the latest injury and lineup news and returns a structured plan: transfers, captain pick, chip strategy, and differentials to exploit — every recommendation backed by citations.
 
+## ⚽ World Cup 2026 Fantasy mode (`/wc`)
+
+A full AI manager dashboard for the **official FIFA World Cup 2026™ Fantasy** game (play.fifa.com/fantasy), living alongside the FPL app at the `/wc` route:
+
+- **Official live data** — players, fixed prices, ownership, round points and match states straight from FIFA's public fantasy feed (`play.fifa.com/json/fantasy/*`); teams, groups and team-strength are derived from the feed itself.
+- **AI MD1 draft** — an LP optimizer builds three rule-perfect candidate squads (balanced / stars / differential), then Gemini reviews them against this week's confirmed squads, injuries and predicted lineups via live web search. Illegal AI swaps are rejected by the rules engine, never trusted.
+- **Matchday coach** — transfers within your free allowance, a kickoff-ordered **captain-rotation plan** (this game lets you move the armband mid-round to players who haven't played), bench order and booster strategy (Wildcard/12th Man/Max Captain/Qualification/Mystery) per the official guidelines.
+- **Live cockpit** — your XV's official round points (captain ×2), confirmed-XI badges from API-Football, status-change deltas (e.g. `playing → injured`), and in-round action prompts ("your captain blanked — these matches haven't kicked off yet").
+- **Rules engine** — budget ($100m → $105m at R32), per-nation caps (3 → 8 by the final), per-round free transfers, formation bounds and booster windows encoded as data and enforced on every squad save and every AI suggestion.
+- Your squad lives in-app (localStorage + optional Upstash Redis sync) — FIFA exposes no private-team API, so you mirror moves onto play.fifa.com.
+
 ## Stack
 
 - **Next.js 15** (App Router) + TypeScript

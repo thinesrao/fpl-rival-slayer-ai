@@ -18,6 +18,11 @@ const schema = z.object({
   // Shared secret sent as X-FPL-Proxy-Secret to the proxy; ignored when
   // FPL_PROXY_URL is unset.
   FPL_PROXY_SECRET: z.string().optional(),
+  // API-Football (v3.football.api-sports.io) key for WC26 confirmed lineups.
+  // Optional — the WC dashboard degrades gracefully without it.
+  API_FOOTBALL_KEY: z.string().optional(),
+  // When set, /api/wc/cron/* routes require `Authorization: Bearer <secret>`.
+  CRON_SECRET: z.string().optional(),
 });
 
 const parsed = schema.safeParse({
@@ -26,6 +31,8 @@ const parsed = schema.safeParse({
   FPL_USER_AGENT: process.env.FPL_USER_AGENT,
   FPL_PROXY_URL: process.env.FPL_PROXY_URL,
   FPL_PROXY_SECRET: process.env.FPL_PROXY_SECRET,
+  API_FOOTBALL_KEY: process.env.API_FOOTBALL_KEY,
+  CRON_SECRET: process.env.CRON_SECRET,
 });
 
 if (!parsed.success) {
@@ -40,9 +47,12 @@ export const env = parsed.success
       FPL_USER_AGENT: CHROME_UA,
       FPL_PROXY_URL: undefined,
       FPL_PROXY_SECRET: undefined,
+      API_FOOTBALL_KEY: undefined,
+      CRON_SECRET: undefined,
     };
 
 export const aiEnabled = Boolean(env.GEMINI_API_KEY);
+export const apiFootballEnabled = Boolean(env.API_FOOTBALL_KEY);
 
 // Public defaults — readable on the client so the form can pre-fill them.
 // Inlined as `process.env.NEXT_PUBLIC_*` so Next.js statically substitutes at build time.
