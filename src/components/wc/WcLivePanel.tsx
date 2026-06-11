@@ -43,7 +43,7 @@ interface LiveResponse {
     played: boolean;
     finished: boolean;
     kickoff: string | null;
-    lineupStatus: "starts" | "benched" | "unknown";
+    lineupStatus: "starts" | "benched" | "out" | "unknown";
     status: string;
   }>;
   liveTotal: number;
@@ -61,7 +61,10 @@ export function WcLivePanel({ squad }: { data?: WcBootstrap; squad: WcSquadState
       if (!res.ok) throw new Error("live fetch failed");
       return res.json();
     },
-    refetchInterval: (q) => (q.state.data?.roundStatus === "active" ? 60_000 : 5 * 60_000),
+    refetchInterval: (q) => {
+      const s = q.state.data?.roundStatus;
+      return s && s !== "scheduled" && s !== "complete" ? 60_000 : 5 * 60_000;
+    },
     staleTime: 30_000,
   });
 
@@ -75,7 +78,7 @@ export function WcLivePanel({ squad }: { data?: WcBootstrap; squad: WcSquadState
     );
   }
 
-  const isLive = live.roundStatus === "active";
+  const isLive = live.roundStatus !== "scheduled" && live.roundStatus !== "complete";
   const xi = live.players.filter((p) => p.isXI);
   const bench = live.players.filter((p) => !p.isXI);
 
@@ -147,7 +150,10 @@ export function WcLivePanel({ squad }: { data?: WcBootstrap; squad: WcSquadState
                     <Badge variant="outline" className="border-emerald-500/50 px-1 py-0 text-[9px] text-emerald-300">XI confirmed</Badge>
                   )}
                   {p.lineupStatus === "benched" && !p.played && (
-                    <Badge variant="outline" className="border-red-500/50 px-1 py-0 text-[9px] text-red-300">benched IRL</Badge>
+                    <Badge variant="outline" className="border-amber-500/50 px-1 py-0 text-[9px] text-amber-300">on bench IRL</Badge>
+                  )}
+                  {p.lineupStatus === "out" && (
+                    <Badge variant="outline" className="border-red-500/50 px-1 py-0 text-[9px] text-red-300">not in squad</Badge>
                   )}
                   <span className="font-mono text-[10px] text-muted-foreground">
                     {p.finished ? "FT" : p.played ? "LIVE" : p.kickoff ? new Date(p.kickoff).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : "—"}

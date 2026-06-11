@@ -52,9 +52,10 @@ export async function buildWcDigest(ctx: WcContext, squad: WcSquadState | null):
         p.id === squad.captainId ? " (C)" : p.id === squad.viceId ? " (VC)" : "";
       const slot = squad.startingXI.includes(p.id) ? "XI" : "BENCH";
       const status = p.status !== "playing" ? ` STATUS:${p.status}` : "";
+      const lineup = p.matchStatus ? ` LINEUP:${p.matchStatus}` : "";
       lines.push(
         `  P${p.id} ${displayName(p)}${role} [${slot}] ${team?.abbr} ${p.position} $${p.price.toFixed(1)}m ` +
-          `${p.stats.totalPoints}pts own${p.percentSelected.toFixed(1)}%${status}`,
+          `${p.stats.totalPoints}pts own${p.percentSelected.toFixed(1)}%${status}${lineup}`,
       );
     }
     const used = Object.entries(squad.boostersUsed)

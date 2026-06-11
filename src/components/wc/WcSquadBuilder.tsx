@@ -178,6 +178,13 @@ export function WcSquadBuilder({ data, squad, update }: WcSquadBuilderProps) {
   const benchPlayers = squad.bench.map((id) => byId.get(id)).filter((p): p is WcPickerPlayer => Boolean(p));
   const sheetIsBench = sheetPlayer != null && squad.bench.includes(sheetPlayer.id);
 
+  // While a round is in play, cards show official round points instead of
+  // price/fixture (lastRoundPoints tracks the live round).
+  const livePoints =
+    data.activeRoundId != null
+      ? new Map(picked.map((p) => [p.id, p.lastRoundPoints]))
+      : undefined;
+
   return (
     <div className="space-y-3">
       {/* Status bar */}
@@ -218,6 +225,7 @@ export function WcSquadBuilder({ data, squad, update }: WcSquadBuilderProps) {
               captainId={squad.captainId}
               viceId={squad.viceId}
               onTileClick={setSheetPlayer}
+              livePoints={livePoints}
             />
           ) : (
             <div className="flex h-64 items-center justify-center rounded-2xl border border-dashed text-sm text-muted-foreground">

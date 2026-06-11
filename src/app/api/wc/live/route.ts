@@ -4,10 +4,15 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getWcContext } from "@/lib/wc/context";
-import { displayName, roundLockTime, WcFeedError } from "@/lib/wc/fifa/client";
+import {
+  displayName,
+  roundInProgress,
+  roundLockTime,
+  roundPointsFor,
+  WcFeedError,
+} from "@/lib/wc/fifa/client";
 import type { WcMatch, WcPlayer } from "@/lib/wc/fifa/types";
 import { ensureSnapshot, recentDeltas } from "@/lib/wc/snapshot";
-import { getLineupsIfDue, nameInLineup, type ConfirmedLineup } from "@/lib/wc/apifootball/client";
 import { kvGet } from "@/lib/store/redis";
 import { isWcSquadState, type WcSquadState } from "@/lib/wc/squad/types";
 
@@ -30,20 +35,17 @@ export async function GET(req: NextRequest) {
     await ensureSnapshot().catch(() => {});
     const ctx = await getWcContext();
     const round = ctx.active ?? ctx.target;
-    const roundIdx = ctx.rounds.findIndex((r) => r.id === round.id);
 
     let squad: WcSquadState | null = null;
     if (uid) squad = await kvGet<WcSquadState>(`wc:squad:${uid}`).then((s) => (isWcSquadState(s) ? s : null));
 
     const matches = [...round.tournaments].sort((a, b) => a.date.localeCompare(b.date));
 
-    // Confirmed lineups for matches in the pre-kickoff window (budgeted).
-    const lineupsByMatch = new Map<number, ConfirmedLineup[]>();
-    for (const m of matches) {
-      if (matchFinished(m)) continue;
-      const lineups = await getLineupsIfDue(m).catch(() => null);
-      if (lineups) lineupsByMatch.set(m.id, lineups);
-    }
+    // Confirmed lineups come straight from the official feed: matchStatus is
+    // set to start/sub/not_in_squad per player the moment XIs are announced.
+    const lineupKnownSquads = new Set(
+      ctx.players.filter((p) => p.matchStatus != null).map((p) => p.squadId),
+    );
 
     const playerRows = (squad?.picks ?? [])
       .map((id) => ctx.playerById.get(id))
@@ -51,16 +53,15 @@ export async function GET(req: NextRequest) {
       .map((p) => {
         const team = ctx.teamIndex.byId.get(p.squadId);
         const match = matches.find((m) => m.homeSquadId === p.squadId || m.awaySquadId === p.squadId) ?? null;
-        const roundPts = p.stats.roundPoints[roundIdx] ?? null;
-        const lineups = match ? lineupsByMatch.get(match.id) : undefined;
-        let lineupStatus: "starts" | "benched" | "unknown" = "unknown";
-        if (lineups && team) {
-          const own = lineups.find((l) => l.team.toLowerCase().includes(team.name.toLowerCase().slice(0, 5)));
-          if (own) {
-            if (nameInLineup(displayName(p), own.startersNames)) lineupStatus = "starts";
-            else if (nameInLineup(displayName(p), own.benchNames)) lineupStatus = "benched";
-          }
-        }
+        const roundPts = roundPointsFor(p, round.id);
+        const lineupStatus: "starts" | "benched" | "out" | "unknown" =
+          p.matchStatus === "start"
+            ? "starts"
+            : p.matchStatus === "sub"
+              ? "benched"
+              : p.matchStatus === "not_in_squad"
+                ? "out"
+                : "unknown";
         return {
           id: p.id,
           name: displayName(p),
@@ -81,7 +82,22 @@ export async function GET(req: NextRequest) {
 
     // Action prompts — the live edges this game uniquely allows.
     const prompts: string[] = [];
-    if (squad && round.status === "active") {
+    if (squad && roundInProgress(round)) {
+      // Post-match digest: after each finished match involving owned players,
+      // summarise their hauls and nudge the next move.
+      const finishedWithMine = matches.filter(
+        (m) => matchFinished(m) && playerRows.some((r) => r.matchId === m.id),
+      );
+      for (const m of finishedWithMine) {
+        const mine = playerRows.filter((r) => r.matchId === m.id);
+        const summary = mine
+          .map((r) => `${r.name} ${r.roundPoints ?? 0}pts${r.isCaptain ? " (C, doubled)" : ""}`)
+          .join(", ");
+        prompts.push(
+          `FT ${m.homeSquadAbbr} ${m.homeScore}-${m.awayScore} ${m.awaySquadAbbr}: ${summary}. ` +
+            `Re-run the Coach for your next move based on these returns.`,
+        );
+      }
       const cap = playerRows.find((r) => r.isCaptain);
       const upcoming = playerRows.filter((r) => r.isXI && !r.played && !r.isCaptain);
       if (cap?.finished && (cap.roundPoints ?? 0) <= 4 && upcoming.length > 0) {
@@ -92,8 +108,10 @@ export async function GET(req: NextRequest) {
         );
       }
       for (const r of playerRows) {
-        if (r.isXI && r.lineupStatus === "benched" && !r.played) {
-          prompts.push(`${r.name} is NOT in the confirmed XI — consider a manual bench swap before kickoff.`);
+        if (r.isXI && (r.lineupStatus === "benched" || r.lineupStatus === "out") && !r.played) {
+          prompts.push(
+            `${r.name} is ${r.lineupStatus === "out" ? "NOT in the matchday squad" : "on the real-life bench"} — consider a manual bench swap before kickoff.`,
+          );
         }
       }
       for (const r of playerRows) {
@@ -121,7 +139,9 @@ export async function GET(req: NextRequest) {
         home: { abbr: m.homeSquadAbbr, name: m.homeSquadName, score: m.homeScore },
         away: { abbr: m.awaySquadAbbr, name: m.awaySquadName, score: m.awayScore },
         venueCity: m.venueCity,
-        hasLineups: lineupsByMatch.has(m.id),
+        hasLineups:
+          (m.homeSquadId != null && lineupKnownSquads.has(m.homeSquadId)) ||
+          (m.awaySquadId != null && lineupKnownSquads.has(m.awaySquadId)),
       })),
       players: playerRows,
       liveTotal,

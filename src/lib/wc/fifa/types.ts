@@ -14,8 +14,9 @@ export interface WcPlayerStats {
   avgPoints: number;
   form: number;
   lastRoundPoints: number;
-  /** Points per completed/active round, parallel to round ids encountered so far. */
-  roundPoints: number[];
+  /** Per-round points. Empty ARRAY before any round starts, then a DICT keyed
+   *  by round id ("1": 10). Always read via roundPointsFor(). */
+  roundPoints: number[] | Record<string, number>;
   nextFixtureFromActiveRound: number | null;
   nextFixtureFromScheduledRound: number | null;
 }

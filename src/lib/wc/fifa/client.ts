@@ -71,7 +71,7 @@ export async function getWcRounds(): Promise<WcRound[]> {
 
 /** The round currently in play, if any. */
 export function activeRound(rounds: WcRound[]): WcRound | null {
-  return rounds.find((r) => r.status === "active") ?? null;
+  return rounds.find((r) => r.status !== "scheduled" && r.status !== "complete") ?? null;
 }
 
 /** The next round that hasn't started (by feed status, then by lock time). */
@@ -82,10 +82,11 @@ export function nextScheduledRound(rounds: WcRound[]): WcRound | null {
   return rounds.find((r) => new Date(r.startDate).getTime() > now) ?? null;
 }
 
-/** The round we plan FOR: next scheduled if available, else the live one,
- *  else the last round (tournament over). */
+/** The round we plan FOR: the live one while it's in play (mid-round captain
+ *  moves and bench subs are this game's biggest edge), else the next
+ *  scheduled, else the last round (tournament over). */
 export function targetRound(rounds: WcRound[]): WcRound {
-  return nextScheduledRound(rounds) ?? activeRound(rounds) ?? rounds[rounds.length - 1];
+  return activeRound(rounds) ?? nextScheduledRound(rounds) ?? rounds[rounds.length - 1];
 }
 
 /** A round "locks" when its first match kicks off. */
@@ -97,4 +98,19 @@ export function roundLockTime(round: WcRound): Date {
 
 export function displayName(p: WcPlayer): string {
   return p.knownName || [p.firstName, p.lastName].filter(Boolean).join(" ") || `#${p.id}`;
+}
+
+/** Points a player scored in a given round. Handles both feed shapes: an
+ *  empty array pre-tournament and a {"<roundId>": pts} dict once live. */
+export function roundPointsFor(p: WcPlayer, roundId: number): number | null {
+  const rp = p.stats.roundPoints;
+  if (Array.isArray(rp)) return rp[roundId - 1] ?? null;
+  const v = rp?.[String(roundId)];
+  return typeof v === "number" ? v : null;
+}
+
+/** A round is in progress the moment it's neither waiting nor finished —
+ *  the live feed uses "playing" (not "active"). */
+export function roundInProgress(round: Pick<WcRound, "status">): boolean {
+  return round.status !== "scheduled" && round.status !== "complete";
 }
