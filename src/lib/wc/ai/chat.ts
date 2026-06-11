@@ -4,7 +4,7 @@
 
 import { GoogleGenAI, type GroundingMetadata } from "@google/genai";
 import { aiEnabled, env } from "@/lib/env";
-import { withModelRetry } from "./gemini";
+import { isTransientGeminiError, modelAttempts, suggestedRetryDelayMs } from "./gemini";
 
 let cachedClient: GoogleGenAI | null = null;
 function client(): GoogleGenAI {
@@ -63,61 +63,56 @@ export async function* wcChatStream(
   let aggregated = "";
   let lastMeta: GroundingMetadata | undefined;
 
-  const stream = await withModelRetry(model, (m) =>
-    ai.models.generateContentStream({
-      model: m,
-      contents,
-      config: {
-        systemInstruction: SYSTEM,
-        temperature: 0.4,
-        tools: [{ googleSearch: {} }],
-        thinkingConfig: { thinkingBudget: 1024 },
-        maxOutputTokens: 4096,
-      },
-    }),
-  );
+  // Streams can fail DURING iteration (Gemini 429/503 surfaces mid-stream),
+  // so the whole create-and-consume cycle walks the retry ladder: primary
+  // grounded, primary grounded again, flash grounded, then one ungrounded
+  // pass. Once any text has been yielded to the client we can't restart
+  // without duplicating output, so mid-text errors propagate.
+  const attempts = [
+    ...modelAttempts(model).map((a) => ({ ...a, grounded: true })),
+    { model, delayMs: 2000, grounded: false },
+  ];
+  let lastErr: unknown;
 
-  for await (const chunk of stream) {
-    const candidate = chunk.candidates?.[0];
-    const partsText = (candidate?.content?.parts ?? [])
-      .map((p) => ("text" in p && typeof p.text === "string" ? p.text : ""))
-      .join("");
-    const delta = chunk.text || partsText || "";
-    if (delta) {
-      aggregated += delta;
-      yield { delta };
-    }
-    if (candidate?.groundingMetadata) lastMeta = candidate.groundingMetadata;
-  }
-
-  if (!aggregated) {
-    // Same reliability fallback as the FPL chat: retry once ungrounded.
-    const fallback = await withModelRetry(model, (m) =>
-      ai.models.generateContentStream({
-        model: m,
+  for (const attempt of attempts) {
+    const delayMs = lastErr ? suggestedRetryDelayMs(lastErr, attempt.delayMs) : attempt.delayMs;
+    if (delayMs) await new Promise((r) => setTimeout(r, delayMs));
+    try {
+      const stream = await ai.models.generateContentStream({
+        model: attempt.model,
         contents,
         config: {
           systemInstruction: SYSTEM,
           temperature: 0.4,
-          thinkingConfig: { thinkingBudget: 512 },
+          ...(attempt.grounded ? { tools: [{ googleSearch: {} }] } : {}),
+          thinkingConfig: { thinkingBudget: attempt.grounded ? 1024 : 512 },
           maxOutputTokens: 4096,
         },
-      }),
-    );
-    for await (const chunk of fallback) {
-      const candidate = chunk.candidates?.[0];
-      const partsText = (candidate?.content?.parts ?? [])
-        .map((p) => ("text" in p && typeof p.text === "string" ? p.text : ""))
-        .join("");
-      const delta = chunk.text || partsText || "";
-      if (delta) {
-        aggregated += delta;
-        yield { delta };
+      });
+      for await (const chunk of stream) {
+        const candidate = chunk.candidates?.[0];
+        const partsText = (candidate?.content?.parts ?? [])
+          .map((p) => ("text" in p && typeof p.text === "string" ? p.text : ""))
+          .join("");
+        const delta = chunk.text || partsText || "";
+        if (delta) {
+          aggregated += delta;
+          yield { delta };
+        }
+        if (candidate?.groundingMetadata) lastMeta = candidate.groundingMetadata;
       }
-      if (candidate?.groundingMetadata) lastMeta = candidate.groundingMetadata;
+      if (aggregated) break; // success — empty streams fall through to the next attempt
+      lastErr = new Error("Gemini stream returned no text.");
+    } catch (err) {
+      lastErr = err;
+      if (!isTransientGeminiError(err) || aggregated) throw err;
+      console.warn(
+        `[wc/chat] transient Gemini error on ${attempt.model}${attempt.grounded ? "" : " (ungrounded)"}, retrying`,
+        err instanceof Error ? err.message.slice(0, 120) : err,
+      );
     }
-    if (!aggregated) throw new Error("Gemini stream returned no text.");
   }
+  if (!aggregated) throw lastErr ?? new Error("Gemini stream returned no text.");
 
   const g = extractGrounding(lastMeta);
   yield { done: true, citations: g.chunks, searchQueries: g.queries };

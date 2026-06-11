@@ -32,17 +32,30 @@ export function friendlyGeminiError(err: unknown): string {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Run `fn` against a ladder of (model, delay) attempts: primary model twice
- *  with backoff, then the flash fallback. Non-transient errors throw at once. */
-export async function withModelRetry<R>(primary: string, fn: (model: string) => Promise<R>): Promise<R> {
-  const attempts: Array<{ model: string; delayMs: number }> = [
+/** Google's 429s carry a RetryInfo hint ("retryDelay": "15s") — honor it,
+ *  capped so we don't blow the function deadline. */
+export function suggestedRetryDelayMs(err: unknown, fallbackMs: number): number {
+  const msg = err instanceof Error ? err.message : String(err);
+  const m = /retryDelay[\\"':\s]+(\d+)s/i.exec(msg);
+  if (!m) return fallbackMs;
+  return Math.min(Number(m[1]) * 1000 + 500, 25_000);
+}
+
+/** The (model, delay) attempt ladder: primary twice with backoff, then flash. */
+export function modelAttempts(primary: string): Array<{ model: string; delayMs: number }> {
+  return [
     { model: primary, delayMs: 0 },
     { model: primary, delayMs: 2500 },
     ...(primary !== FALLBACK_MODEL ? [{ model: FALLBACK_MODEL, delayMs: 1500 }] : [{ model: primary, delayMs: 5000 }]),
   ];
+}
+
+/** Run `fn` against the attempt ladder. Non-transient errors throw at once. */
+export async function withModelRetry<R>(primary: string, fn: (model: string) => Promise<R>): Promise<R> {
   let lastErr: unknown;
-  for (const attempt of attempts) {
-    if (attempt.delayMs) await sleep(attempt.delayMs);
+  for (const attempt of modelAttempts(primary)) {
+    const delayMs = lastErr ? suggestedRetryDelayMs(lastErr, attempt.delayMs) : attempt.delayMs;
+    if (delayMs) await sleep(delayMs);
     try {
       return await fn(attempt.model);
     } catch (err) {
