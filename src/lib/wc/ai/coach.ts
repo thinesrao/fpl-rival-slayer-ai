@@ -272,11 +272,18 @@ export async function runCoach(
 
     if (!repaired) {
       // Budget / nation-cap failure (or no position repair found): keep the
-      // AI's OUT but swap the IN for the best same-position market player
-      // that passes validation.
+      // AI's OUT but swap the IN for the best same-position player that
+      // passes validation. Search the FULL player pool, not just the prompt's
+      // value-ranked menu — affordable enablers live outside the top 50.
       const outFinal = outP;
-      const alternatives = market
-        .filter((p) => p.position === outFinal.position && !workingPicks.includes(p.id))
+      const alternatives = ctx.players
+        .filter(
+          (p) =>
+            p.status === "playing" &&
+            p.position === outFinal.position &&
+            p.id !== inP.id &&
+            !workingPicks.includes(p.id),
+        )
         .sort((a, b) => proj(b.id) - proj(a.id));
       for (const alt of alternatives) {
         const t2 = workingPicks.map((id) => (id === outFinal.id ? alt.id : id));
