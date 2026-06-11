@@ -9,6 +9,7 @@ import { getWcContext } from "@/lib/wc/context";
 import { ensureSnapshot } from "@/lib/wc/snapshot";
 import { isWcSquadState, type WcSquadState } from "@/lib/wc/squad/types";
 import { runCoach, type CoachResult } from "@/lib/wc/ai/coach";
+import { friendlyGeminiError, isTransientGeminiError } from "@/lib/wc/ai/gemini";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -59,8 +60,8 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error("[wc/ai/coach]", err);
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Unknown error" },
-      { status: 500 },
+      { error: friendlyGeminiError(err) },
+      { status: isTransientGeminiError(err) ? 503 : 500 },
     );
   }
 }

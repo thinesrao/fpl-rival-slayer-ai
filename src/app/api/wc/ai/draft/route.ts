@@ -6,6 +6,7 @@ import { aiEnabled } from "@/lib/env";
 import { kvGet, kvSet } from "@/lib/store/redis";
 import { getWcContext } from "@/lib/wc/context";
 import { runAiDraft, type DraftResult } from "@/lib/wc/ai/draft";
+import { friendlyGeminiError, isTransientGeminiError } from "@/lib/wc/ai/gemini";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,8 +37,10 @@ export async function POST(req: NextRequest) {
     if (result.aiUsed) await kvSet(CACHE_KEY, result, CACHE_TTL);
     return NextResponse.json({ ...result, cached: false });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
     console.error("[wc/ai/draft]", err);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: friendlyGeminiError(err) },
+      { status: isTransientGeminiError(err) ? 503 : 500 },
+    );
   }
 }

@@ -4,6 +4,7 @@
 
 import { GoogleGenAI, type GroundingMetadata } from "@google/genai";
 import { aiEnabled, env } from "@/lib/env";
+import { withModelRetry } from "./gemini";
 
 let cachedClient: GoogleGenAI | null = null;
 function client(): GoogleGenAI {
@@ -62,17 +63,19 @@ export async function* wcChatStream(
   let aggregated = "";
   let lastMeta: GroundingMetadata | undefined;
 
-  const stream = await ai.models.generateContentStream({
-    model,
-    contents,
-    config: {
-      systemInstruction: SYSTEM,
-      temperature: 0.4,
-      tools: [{ googleSearch: {} }],
-      thinkingConfig: { thinkingBudget: 1024 },
-      maxOutputTokens: 4096,
-    },
-  });
+  const stream = await withModelRetry(model, (m) =>
+    ai.models.generateContentStream({
+      model: m,
+      contents,
+      config: {
+        systemInstruction: SYSTEM,
+        temperature: 0.4,
+        tools: [{ googleSearch: {} }],
+        thinkingConfig: { thinkingBudget: 1024 },
+        maxOutputTokens: 4096,
+      },
+    }),
+  );
 
   for await (const chunk of stream) {
     const candidate = chunk.candidates?.[0];
@@ -89,16 +92,18 @@ export async function* wcChatStream(
 
   if (!aggregated) {
     // Same reliability fallback as the FPL chat: retry once ungrounded.
-    const fallback = await ai.models.generateContentStream({
-      model,
-      contents,
-      config: {
-        systemInstruction: SYSTEM,
-        temperature: 0.4,
-        thinkingConfig: { thinkingBudget: 512 },
-        maxOutputTokens: 4096,
-      },
-    });
+    const fallback = await withModelRetry(model, (m) =>
+      ai.models.generateContentStream({
+        model: m,
+        contents,
+        config: {
+          systemInstruction: SYSTEM,
+          temperature: 0.4,
+          thinkingConfig: { thinkingBudget: 512 },
+          maxOutputTokens: 4096,
+        },
+      }),
+    );
     for await (const chunk of fallback) {
       const candidate = chunk.candidates?.[0];
       const partsText = (candidate?.content?.parts ?? [])

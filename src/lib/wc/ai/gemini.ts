@@ -14,6 +14,46 @@ function client(): GoogleGenAI {
   return cachedClient;
 }
 
+const FALLBACK_MODEL = "gemini-2.5-flash";
+
+/** Gemini returns 503 UNAVAILABLE ("high demand") and 429 during spikes —
+ *  transient by definition, so we retry and then downgrade models. */
+export function isTransientGeminiError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /503|UNAVAILABLE|overloaded|high demand|try again later|429|RESOURCE_EXHAUSTED/i.test(msg);
+}
+
+export function friendlyGeminiError(err: unknown): string {
+  if (isTransientGeminiError(err)) {
+    return "Gemini is overloaded right now (Google-side spike). Wait ~30s and tap retry — the app already retried on a backup model.";
+  }
+  return err instanceof Error ? err.message : String(err);
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Run `fn` against a ladder of (model, delay) attempts: primary model twice
+ *  with backoff, then the flash fallback. Non-transient errors throw at once. */
+export async function withModelRetry<R>(primary: string, fn: (model: string) => Promise<R>): Promise<R> {
+  const attempts: Array<{ model: string; delayMs: number }> = [
+    { model: primary, delayMs: 0 },
+    { model: primary, delayMs: 2500 },
+    ...(primary !== FALLBACK_MODEL ? [{ model: FALLBACK_MODEL, delayMs: 1500 }] : [{ model: primary, delayMs: 5000 }]),
+  ];
+  let lastErr: unknown;
+  for (const attempt of attempts) {
+    if (attempt.delayMs) await sleep(attempt.delayMs);
+    try {
+      return await fn(attempt.model);
+    } catch (err) {
+      lastErr = err;
+      if (!isTransientGeminiError(err)) throw err;
+      console.warn(`[wc/ai] transient Gemini error on ${attempt.model}, retrying`, err instanceof Error ? err.message.slice(0, 120) : err);
+    }
+  }
+  throw lastErr;
+}
+
 export interface GroundedJsonResult<T> {
   parsed: T;
   raw: string;
@@ -43,16 +83,20 @@ export async function askGroundedJson<T>(args: {
     };
   }
 
-  const response = await ai.models.generateContent({
-    model,
-    contents: args.userPrompt,
-    config: {
-      systemInstruction: args.systemInstruction,
-      temperature: 0.3,
-      tools: [{ googleSearch: {} }],
-      thinkingConfig: { thinkingBudget: args.thinkingBudget ?? 2048 },
-      maxOutputTokens: 16384,
-    },
+  let usedModel = model;
+  const response = await withModelRetry(model, (m) => {
+    usedModel = m;
+    return ai.models.generateContent({
+      model: m,
+      contents: args.userPrompt,
+      config: {
+        systemInstruction: args.systemInstruction,
+        temperature: 0.3,
+        tools: [{ googleSearch: {} }],
+        thinkingConfig: { thinkingBudget: args.thinkingBudget ?? 2048 },
+        maxOutputTokens: 16384,
+      },
+    });
   });
 
   let { text, finishReason, candidate } = extractText(response);
@@ -61,17 +105,19 @@ export async function askGroundedJson<T>(args: {
   if (!text) {
     // Grounded call produced no usable text — retry once without googleSearch,
     // trading live news for a guaranteed answer.
-    const fallback = await ai.models.generateContent({
-      model,
-      contents: args.userPrompt,
-      config: {
-        systemInstruction: args.systemInstruction,
-        temperature: 0.3,
-        thinkingConfig: { thinkingBudget: 1024 },
-        maxOutputTokens: 16384,
-        responseMimeType: "application/json",
-      },
-    });
+    const fallback = await withModelRetry(usedModel, (m) =>
+      ai.models.generateContent({
+        model: m,
+        contents: args.userPrompt,
+        config: {
+          systemInstruction: args.systemInstruction,
+          temperature: 0.3,
+          thinkingConfig: { thinkingBudget: 1024 },
+          maxOutputTokens: 16384,
+          responseMimeType: "application/json",
+        },
+      }),
+    );
     ({ text, finishReason, candidate } = extractText(fallback));
     usedResponse = fallback;
   }
@@ -93,15 +139,17 @@ export async function askGroundedJson<T>(args: {
   try {
     parsedJson = extractJsonBlock(text);
   } catch (firstErr) {
-    const reformat = await ai.models.generateContent({
-      model,
-      contents:
+    const reformat = await withModelRetry(usedModel, (m) =>
+      ai.models.generateContent({
+        model: m,
+        contents:
         `The following text was meant to be a JSON object matching a schema, but failed to parse. ` +
         `Re-emit it as a single valid JSON object. Output NOTHING except the JSON — no prose, no markdown ` +
         `fences, no comments. If a field is missing, fill with a sensible default ("", [], "medium", "none"). ` +
         `Preserve every concrete recommendation from the source text.\n\nSOURCE:\n${text.slice(0, 12000)}`,
-      config: { temperature: 0.0, responseMimeType: "application/json" },
-    });
+        config: { temperature: 0.0, responseMimeType: "application/json" },
+      }),
+    );
     try {
       parsedJson = extractJsonBlock(reformat.text ?? "");
     } catch {
@@ -115,6 +163,6 @@ export async function askGroundedJson<T>(args: {
     raw: text,
     searchQueries: grounding.queries,
     groundingChunks: grounding.chunks,
-    model,
+    model: usedModel,
   };
 }
