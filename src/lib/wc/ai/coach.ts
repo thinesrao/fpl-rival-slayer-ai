@@ -61,6 +61,8 @@ export interface CoachResult {
     hitCost: number;
     legal: boolean;
     whyIllegal?: string;
+    /** Set when the server auto-repaired an illegal AI proposal. */
+    adjusted?: string;
   }>;
   captainPlan: Array<{ playerId: number | null; player: string; kickoff: string; condition: string; rationale: string }>;
   benchOrder: number[];
@@ -133,6 +135,26 @@ export async function runCoach(
       ? ("unlimited" as const)
       : Math.max(0, rules.freeTransfers - transfersMade);
 
+  // Exact constraint numbers — the model is bad at deriving these itself.
+  const squadPlayers = squad.picks
+    .map((id) => ctx.playerById.get(id))
+    .filter((p): p is NonNullable<ReturnType<typeof ctx.playerById.get>> => Boolean(p));
+  const squadCost = Math.round(squadPlayers.reduce((s, p) => s + p.price, 0) * 10) / 10;
+  const bank = Math.round((rules.budget - squadCost) * 10) / 10;
+  const nationCounts = new Map<string, number>();
+  for (const p of squadPlayers) {
+    const abbr = ctx.teamIndex.byId.get(p.squadId)?.abbr ?? "?";
+    nationCounts.set(abbr, (nationCounts.get(abbr) ?? 0) + 1);
+  }
+  const constraintLines = [
+    `EXACT CONSTRAINTS (use these numbers, do not estimate):`,
+    `  Squad cost $${squadCost}m of $${rules.budget}m budget → BANK: $${bank.toFixed(1)}m.`,
+    `  A swap is affordable only if in.price ≤ out.price + ${bank.toFixed(1)} (recompute bank after each swap).`,
+    `  Nation counts (max ${rules.maxPerNation}): ${[...nationCounts.entries()].map(([a, n]) => `${a}:${n}`).join(" ")}.`,
+    `  Positions shown are THIS GAME's official listings and may differ from real-world roles —`,
+    `  out and in MUST have the same listed position (GK/DEF/MID/FWD as printed on each line).`,
+  ].join("\n");
+
   const transferStateLine = preLock
     ? `SQUAD NOT LOCKED YET: this is Matchday 1 BEFORE the deadline (${ctx.targetLockIso}). The user can still ` +
       `change ANY number of players, captain, bench and formation freely with NO transfer cost — these are not ` +
@@ -159,6 +181,8 @@ export async function runCoach(
     ``,
     `TRANSFER MARKET (best available by our value model):`,
     ...market.map((p) => `  ${playerLine(p, ctx.teamIndex, ctx.target)}`),
+    ``,
+    constraintLines,
     ``,
     transferStateLine,
     ``,
@@ -206,18 +230,91 @@ export async function runCoach(
     const trial = workingPicks.map((id) => (id === outP.id ? inP.id : id));
     const check = validateWcSquad(trial, ctx.playerById, ctx.teamIndex.byId, rules);
     const positionOk = outP.position === inP.position;
-    const legal = check.ok && positionOk;
-    if (legal) workingPicks = trial;
-    transfers.push({
-      outId: outP.id,
-      inId: inP.id,
-      out: displayName(outP),
-      in: displayName(inP),
-      reason: t.reason ?? "",
-      hitCost: t.hit_cost ?? 0,
-      legal,
-      whyIllegal: legal ? undefined : positionOk ? check.errors.join("; ") : "position mismatch",
-    });
+
+    if (check.ok && positionOk) {
+      workingPicks = trial;
+      transfers.push({
+        outId: outP.id,
+        inId: inP.id,
+        out: displayName(outP),
+        in: displayName(inP),
+        reason: t.reason ?? "",
+        hitCost: t.hit_cost ?? 0,
+        legal: true,
+      });
+      continue;
+    }
+
+    // Auto-repair instead of rejecting — preserve the AI's intent.
+    const proj = (id: number) => projections.get(id)?.xPts ?? 0;
+    let repaired: { out: typeof outP; in: typeof inP; note: string } | null = null;
+
+    if (!positionOk) {
+      // The AI wants `inP` but targeted an OUT at a different position. Sell
+      // the weakest same-position-as-IN player from the squad instead.
+      const candidates = workingPicks
+        .map((id) => ctx.playerById.get(id))
+        .filter((p): p is NonNullable<typeof p> => Boolean(p))
+        .filter((p) => p.position === inP.position && p.id !== inP.id)
+        .sort((a, b) => proj(a.id) - proj(b.id));
+      for (const cand of candidates) {
+        const t2 = workingPicks.map((id) => (id === cand.id ? inP.id : id));
+        if (validateWcSquad(t2, ctx.playerById, ctx.teamIndex.byId, rules).ok) {
+          repaired = {
+            out: cand,
+            in: inP,
+            note: `${displayName(outP)} plays ${outP.position} — sold ${displayName(cand)} (${inP.position}) instead to fit ${displayName(inP)}`,
+          };
+          break;
+        }
+      }
+    }
+
+    if (!repaired) {
+      // Budget / nation-cap failure (or no position repair found): keep the
+      // AI's OUT but swap the IN for the best same-position market player
+      // that passes validation.
+      const outFinal = outP;
+      const alternatives = market
+        .filter((p) => p.position === outFinal.position && !workingPicks.includes(p.id))
+        .sort((a, b) => proj(b.id) - proj(a.id));
+      for (const alt of alternatives) {
+        const t2 = workingPicks.map((id) => (id === outFinal.id ? alt.id : id));
+        if (validateWcSquad(t2, ctx.playerById, ctx.teamIndex.byId, rules).ok) {
+          repaired = {
+            out: outFinal,
+            in: alt,
+            note: `${displayName(inP)} broke the rules (${positionOk ? check.errors.join("; ") : "position mismatch"}) — ${displayName(alt)} is the best legal alternative`,
+          };
+          break;
+        }
+      }
+    }
+
+    if (repaired) {
+      workingPicks = workingPicks.map((id) => (id === repaired!.out.id ? repaired!.in.id : id));
+      transfers.push({
+        outId: repaired.out.id,
+        inId: repaired.in.id,
+        out: displayName(repaired.out),
+        in: displayName(repaired.in),
+        reason: t.reason ?? "",
+        hitCost: t.hit_cost ?? 0,
+        legal: true,
+        adjusted: repaired.note,
+      });
+    } else {
+      transfers.push({
+        outId: outP.id,
+        inId: inP.id,
+        out: displayName(outP),
+        in: displayName(inP),
+        reason: t.reason ?? "",
+        hitCost: t.hit_cost ?? 0,
+        legal: false,
+        whyIllegal: positionOk ? check.errors.join("; ") : "position mismatch",
+      });
+    }
   }
 
   const captainPlan = ai.captain_plan.map((c) => {

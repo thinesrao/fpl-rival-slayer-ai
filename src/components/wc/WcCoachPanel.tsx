@@ -37,6 +37,7 @@ interface CoachResponse {
     hitCost: number;
     legal: boolean;
     whyIllegal?: string;
+    adjusted?: string;
   }>;
   captainPlan: Array<{ playerId: number | null; player: string; kickoff: string; condition: string; rationale: string }>;
   benchOrder: number[];
@@ -274,9 +275,16 @@ export function WcCoachPanel({
                         </Badge>
                       ) : null}
                       {t.legal ? (
-                        <Button size="sm" className="ml-auto h-6 px-2 text-[10px]" onClick={() => applyTransfer(t)}>
-                          <Check className="mr-0.5 h-3 w-3" /> Apply
-                        </Button>
+                        <span className="ml-auto flex items-center gap-1.5">
+                          {t.adjusted && (
+                            <Badge variant="outline" className="border-amber-500/50 px-1 py-0 text-[9px] text-amber-300">
+                              auto-adjusted
+                            </Badge>
+                          )}
+                          <Button size="sm" className="h-6 px-2 text-[10px]" onClick={() => applyTransfer(t)}>
+                            <Check className="mr-0.5 h-3 w-3" /> Apply
+                          </Button>
+                        </span>
                       ) : (
                         <Badge variant="outline" className="ml-auto border-red-500/50 px-1 py-0 text-[9px] text-red-300">
                           rejected: {t.whyIllegal}
@@ -284,6 +292,7 @@ export function WcCoachPanel({
                       )}
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">{t.reason}</p>
+                    {t.adjusted && <p className="mt-1 text-[11px] text-amber-300/80">🛠 {t.adjusted}</p>}
                   </div>
                 ))}
               </CardContent>
