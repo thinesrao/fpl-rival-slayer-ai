@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { ExternalLink, Send, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { getOrCreateUid } from "@/lib/wc/squad/storage";
 import type { WcSquadState } from "@/lib/wc/squad/types";
 
 interface ChatMsg {
@@ -51,7 +52,21 @@ export function WcChatPanel({ squad }: { squad: WcSquadState }) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setMessages(loadThread());
+    const local = loadThread();
+    setMessages(local);
+    // Local storage empty (new device / cleared browser) — rehydrate from the
+    // server mirror.
+    if (local.length === 0) {
+      fetch(`/api/wc/chat?uid=${encodeURIComponent(getOrCreateUid())}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((body) => {
+          if (Array.isArray(body?.thread) && body.thread.length > 0) {
+            setMessages(body.thread);
+            saveThread(body.thread);
+          }
+        })
+        .catch(() => {});
+    }
   }, []);
 
   useEffect(() => {
@@ -71,7 +86,7 @@ export function WcChatPanel({ squad }: { squad: WcSquadState }) {
       const res = await fetch("/api/wc/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, history, squad }),
+        body: JSON.stringify({ message, history, squad, uid: getOrCreateUid() }),
       });
       if (!res.ok || !res.body) {
         const body = await res.json().catch(() => null);
@@ -132,6 +147,7 @@ export function WcChatPanel({ squad }: { squad: WcSquadState }) {
           onClick={() => {
             setMessages([]);
             saveThread([]);
+            fetch(`/api/wc/chat?uid=${encodeURIComponent(getOrCreateUid())}`, { method: "DELETE" }).catch(() => {});
           }}
           disabled={messages.length === 0}
         >
