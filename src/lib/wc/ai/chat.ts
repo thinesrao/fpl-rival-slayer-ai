@@ -71,6 +71,7 @@ export async function* wcChatStream(
   const attempts = [
     ...modelAttempts(model).map((a) => ({ ...a, grounded: true })),
     { model, delayMs: 2000, grounded: false },
+    { model: "gemini-2.5-flash", delayMs: 2000, grounded: false },
   ];
   let lastErr: unknown;
 

@@ -97,23 +97,34 @@ export async function askGroundedJson<T>(args: {
   }
 
   let usedModel = model;
-  const response = await withModelRetry(model, (m) => {
-    usedModel = m;
-    return ai.models.generateContent({
-      model: m,
-      contents: args.userPrompt,
-      config: {
-        systemInstruction: args.systemInstruction,
-        temperature: 0.3,
-        tools: [{ googleSearch: {} }],
-        thinkingConfig: { thinkingBudget: args.thinkingBudget ?? 2048 },
-        maxOutputTokens: 16384,
-      },
+  // Grounded ladder first; if quota/overload kills every grounded attempt
+  // (search-grounding has its own, tighter quota), fall through to the
+  // ungrounded ladder below rather than failing the whole request.
+  let response: Awaited<ReturnType<typeof ai.models.generateContent>> | null = null;
+  try {
+    response = await withModelRetry(model, (m) => {
+      usedModel = m;
+      return ai.models.generateContent({
+        model: m,
+        contents: args.userPrompt,
+        config: {
+          systemInstruction: args.systemInstruction,
+          temperature: 0.3,
+          tools: [{ googleSearch: {} }],
+          thinkingConfig: { thinkingBudget: args.thinkingBudget ?? 2048 },
+          maxOutputTokens: 16384,
+        },
+      });
     });
-  });
+  } catch (err) {
+    if (!isTransientGeminiError(err)) throw err;
+    console.warn("[wc/ai] grounded ladder exhausted, falling back to ungrounded", err instanceof Error ? err.message.slice(0, 120) : err);
+  }
 
-  let { text, finishReason, candidate } = extractText(response);
   let usedResponse = response;
+  let { text, finishReason, candidate } = response
+    ? extractText(response)
+    : { text: "", finishReason: "UNKNOWN" as string, candidate: undefined };
 
   if (!text) {
     // Grounded call produced no usable text — retry once without googleSearch,
@@ -141,7 +152,7 @@ export async function askGroundedJson<T>(args: {
         `This usually means a safety/recitation block or a quota issue.`,
     );
     (err as Error & { rawText?: string }).rawText = JSON.stringify(
-      { finishReason, safetyRatings: candidate?.safetyRatings, promptFeedback: usedResponse.promptFeedback },
+      { finishReason, safetyRatings: candidate?.safetyRatings, promptFeedback: usedResponse?.promptFeedback },
       null,
       2,
     );
@@ -170,7 +181,7 @@ export async function askGroundedJson<T>(args: {
     }
   }
 
-  const grounding = extractGrounding(usedResponse.candidates?.[0]?.groundingMetadata);
+  const grounding = extractGrounding(usedResponse?.candidates?.[0]?.groundingMetadata);
   return {
     parsed: args.coerce(parsedJson),
     raw: text,
