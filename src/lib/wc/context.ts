@@ -36,6 +36,12 @@ export async function getWcContext(): Promise<WcContext> {
   };
 }
 
+/** True while the user is still building the initial squad: Round 1 exists
+ *  but hasn't locked. Transfer limits only begin once Round 1 locks. */
+export function isPreTournamentLock(ctx: Pick<WcContext, "target" | "targetLockIso">): boolean {
+  return ctx.target.id === 1 && Date.now() < new Date(ctx.targetLockIso).getTime();
+}
+
 /** The opponent label for a team in a given round, e.g. "vs RSA" / "@ MEX". */
 export function opponentInRound(round: WcRound, squadId: number): { match: WcMatch; label: string } | null {
   for (const m of round.tournaments) {

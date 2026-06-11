@@ -3,6 +3,7 @@
 // today's facts, not its training data.
 
 import type { WcContext } from "./context";
+import { isPreTournamentLock } from "./context";
 import { displayName, roundLockTime } from "./fifa/client";
 import type { WcPlayer } from "./fifa/types";
 import { rulesDigest } from "./ai/prompts";
@@ -21,6 +22,12 @@ export async function buildWcDigest(ctx: WcContext, squad: WcSquadState | null):
     `ROUND STATE: planning for ${planning.stage} round ${planning.id} (locks ${roundLockTime(planning).toISOString()}).` +
       (ctx.active ? ` Round ${ctx.active.id} is LIVE.` : " No round currently live."),
   );
+  if (isPreTournamentLock(ctx)) {
+    lines.push(
+      "PRE-DEADLINE (Matchday 1): the squad is NOT locked yet — the user can still change any number of " +
+        "players, captain and bench freely at no cost. Transfer limits only begin after Round 1 locks.",
+    );
+  }
 
   // Kickoffs in order for the round in question — captain-rotation needs this.
   const matches = [...round.tournaments].sort((a, b) => a.date.localeCompare(b.date));

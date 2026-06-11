@@ -3,7 +3,7 @@
 // Matchday coach panel: transfer cards (one-tap apply for legal ones), the
 // kickoff-ordered captain-rotation timeline, booster advice, watchouts.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import {
   ArrowLeftRight,
@@ -51,6 +51,21 @@ interface CoachResponse {
   error?: string;
 }
 
+// Survives page refreshes — the plan stays until a newer one replaces it.
+const COACH_STORE_KEY = "wc26:coach:last";
+
+function loadStoredCoach(roundId: number): { at: string; result: CoachResponse } | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(COACH_STORE_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw) as { at: string; roundId: number; result: CoachResponse };
+    return s.roundId === roundId && s.result ? { at: s.at, result: s.result } : null;
+  } catch {
+    return null;
+  }
+}
+
 export function WcCoachPanel({
   data,
   squad,
@@ -61,7 +76,17 @@ export function WcCoachPanel({
   update: (updater: (prev: WcSquadState) => WcSquadState) => void;
 }) {
   const [result, setResult] = useState<CoachResponse | null>(null);
+  const [resultAt, setResultAt] = useState<string | null>(null);
   const byId = new Map(data.players.map((p) => [p.id, p]));
+
+  // Restore the last plan for this round after a refresh.
+  useEffect(() => {
+    const stored = loadStoredCoach(data.targetRoundId);
+    if (stored) {
+      setResult(stored.result);
+      setResultAt(stored.at);
+    }
+  }, [data.targetRoundId]);
 
   const mutation = useMutation({
     mutationFn: async (fresh: boolean) => {
@@ -74,7 +99,19 @@ export function WcCoachPanel({
       if (!res.ok || body.error) throw new Error(body.error ?? `HTTP ${res.status}`);
       return body;
     },
-    onSuccess: setResult,
+    onSuccess: (r) => {
+      setResult(r);
+      const at = new Date().toISOString();
+      setResultAt(at);
+      try {
+        window.localStorage.setItem(
+          COACH_STORE_KEY,
+          JSON.stringify({ at, roundId: data.targetRoundId, result: r }),
+        );
+      } catch {
+        // storage full/disabled — plan still shows for this session
+      }
+    },
     onError: (err) => toast.error(err instanceof Error ? err.message : "Coach failed"),
   });
 
@@ -156,6 +193,11 @@ export function WcCoachPanel({
               {result.confidence} confidence
             </Badge>
             {result.cached && <Badge variant="outline">cached</Badge>}
+            {resultAt && (
+              <Badge variant="outline" className="font-mono text-[9px]">
+                {new Date(resultAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+              </Badge>
+            )}
             <Button size="sm" variant="outline" className="ml-auto" onClick={() => mutation.mutate(true)} disabled={mutation.isPending}>
               <RefreshCcw className={cn("mr-1 h-3.5 w-3.5", mutation.isPending && "animate-spin")} /> Refresh
             </Button>

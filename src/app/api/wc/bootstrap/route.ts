@@ -3,7 +3,7 @@
 // rules for the round being planned. ~250KB instead of the raw 1.1MB feed.
 
 import { NextResponse } from "next/server";
-import { getWcContext, opponentInRound } from "@/lib/wc/context";
+import { getWcContext, isPreTournamentLock, opponentInRound } from "@/lib/wc/context";
 import { WcFeedError } from "@/lib/wc/fifa/client";
 import { displayName } from "@/lib/wc/fifa/client";
 
@@ -58,10 +58,12 @@ export async function GET() {
       targetLockIso: ctx.targetLockIso,
       rules: {
         ...ctx.targetRules,
-        // Infinity doesn't survive JSON — encode unlimited as -1.
-        freeTransfers: Number.isFinite(ctx.targetRules.freeTransfers)
-          ? ctx.targetRules.freeTransfers
-          : -1,
+        // Infinity doesn't survive JSON — encode unlimited as -1. Before the
+        // Round 1 lock the squad isn't locked at all, so changes are unlimited.
+        freeTransfers:
+          isPreTournamentLock(ctx) || !Number.isFinite(ctx.targetRules.freeTransfers)
+            ? -1
+            : ctx.targetRules.freeTransfers,
       },
     });
   } catch (err) {

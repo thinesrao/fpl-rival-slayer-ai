@@ -3,7 +3,7 @@
 // AI draft panel: one tap → optimizer + Gemini (web-grounded) squad with
 // per-pick rationale and citations; "Use this squad" loads it into the builder.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Brain, Check, ExternalLink, RefreshCcw, Search } from "lucide-react";
 import { toast } from "sonner";
@@ -44,8 +44,23 @@ export interface WcAiDraftPanelProps {
   onAdopted?: () => void;
 }
 
+// Survives page refreshes — the draft stays visible until re-rolled.
+const DRAFT_STORE_KEY = "wc26:draft:last";
+
 export function WcAiDraftPanel({ data, update, onAdopted }: WcAiDraftPanelProps) {
   const [result, setResult] = useState<DraftResponse | null>(null);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(DRAFT_STORE_KEY);
+      if (raw) {
+        const s = JSON.parse(raw) as { result: DraftResponse };
+        if (s.result?.squad) setResult(s.result);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const mutation = useMutation({
     mutationFn: async (fresh: boolean) => {
@@ -58,7 +73,14 @@ export function WcAiDraftPanel({ data, update, onAdopted }: WcAiDraftPanelProps)
       if (!res.ok || body.error) throw new Error(body.error ?? `HTTP ${res.status}`);
       return body;
     },
-    onSuccess: setResult,
+    onSuccess: (r) => {
+      setResult(r);
+      try {
+        window.localStorage.setItem(DRAFT_STORE_KEY, JSON.stringify({ at: new Date().toISOString(), result: r }));
+      } catch {
+        // ignore
+      }
+    },
     onError: (err) => toast.error(err instanceof Error ? err.message : "Draft failed"),
   });
 

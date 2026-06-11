@@ -3,6 +3,7 @@
 // all grounded in the live digest + web search, all token-reconciled.
 
 import type { WcContext } from "@/lib/wc/context";
+import { isPreTournamentLock } from "@/lib/wc/context";
 import { displayName } from "@/lib/wc/fifa/client";
 import type { WcSquadState } from "@/lib/wc/squad/types";
 import { validateWcSquad } from "@/lib/wc/rules/validate";
@@ -26,6 +27,28 @@ interface CoachAiOutput {
   news_citations: Array<{ player: string; summary: string; source_url?: string }>;
   overall: string;
   confidence: "low" | "medium" | "high";
+}
+
+/** Compact memory of the last plan we gave this user — injected into the next
+ *  run so advice stays consistent (or explains why it changed). */
+export interface CoachMemory {
+  at: string;
+  roundId: number;
+  overall: string;
+  transfers: string[];
+  captainPlan: string[];
+  booster: string;
+}
+
+export function toCoachMemory(result: CoachResult, roundId: number): CoachMemory {
+  return {
+    at: new Date().toISOString(),
+    roundId,
+    overall: result.overall,
+    transfers: result.transfers.map((t) => `${t.out} → ${t.in}${t.legal ? "" : " (rejected)"}`),
+    captainPlan: result.captainPlan.map((c) => `${c.player} (${c.condition})`),
+    booster: result.booster.label,
+  };
 }
 
 export interface CoachResult {
@@ -85,7 +108,11 @@ function coachSystemInstruction(): string {
   ].join("\n");
 }
 
-export async function runCoach(ctx: WcContext, squad: WcSquadState): Promise<CoachResult> {
+export async function runCoach(
+  ctx: WcContext,
+  squad: WcSquadState,
+  memory?: CoachMemory | null,
+): Promise<CoachResult> {
   const digest = await buildWcDigest(ctx, squad);
   const completedRounds = ctx.rounds.filter((r) => r.status === "complete").length;
   const projections = projectAll(ctx.players, ctx.target, ctx.teamIndex, completedRounds);
@@ -98,18 +125,42 @@ export async function runCoach(ctx: WcContext, squad: WcSquadState): Promise<Coa
 
   const rules = ctx.targetRules;
   const transfersMade = squad.transfersByRound[ctx.target.id]?.length ?? 0;
-  const freeLeft = rules.unlimitedTransferWindow
-    ? ("unlimited" as const)
-    : Math.max(0, rules.freeTransfers - transfersMade);
+  // Before the Round 1 lock the squad isn't locked at all — the user is still
+  // freely building the initial 15. Transfer limits only start at MD2.
+  const preLock = isPreTournamentLock(ctx);
+  const freeLeft =
+    preLock || rules.unlimitedTransferWindow
+      ? ("unlimited" as const)
+      : Math.max(0, rules.freeTransfers - transfersMade);
+
+  const transferStateLine = preLock
+    ? `SQUAD NOT LOCKED YET: this is Matchday 1 BEFORE the deadline (${ctx.targetLockIso}). The user can still ` +
+      `change ANY number of players, captain, bench and formation freely with NO transfer cost — these are not ` +
+      `"transfers", it's initial squad selection. Transfer limits (2 free per matchday) only begin once Round 1 ` +
+      `locks. Recommend as many changes as genuinely improve the squad.`
+    : `FREE TRANSFERS REMAINING THIS ROUND: ${freeLeft}.`;
+
+  const memoryBlock =
+    memory && memory.captainPlan.length + memory.transfers.length > 0
+      ? [
+          ``,
+          `YOUR PREVIOUS PLAN (round ${memory.roundId}, ${memory.at.slice(0, 16)}Z) — keep continuity; if you change advice, say what new information changed it:`,
+          `  strategy: ${memory.overall.slice(0, 300)}`,
+          memory.transfers.length ? `  transfers advised: ${memory.transfers.join("; ")}` : "",
+          memory.captainPlan.length ? `  captain plan: ${memory.captainPlan.join(" → ")}` : "",
+          `  booster: ${memory.booster}`,
+        ].filter(Boolean)
+      : [];
 
   const userPrompt = [
     `CONTEXT (live official data):`,
     digest,
+    ...memoryBlock,
     ``,
     `TRANSFER MARKET (best available by our value model):`,
     ...market.map((p) => `  ${playerLine(p, ctx.teamIndex, ctx.target)}`),
     ``,
-    `FREE TRANSFERS REMAINING THIS ROUND: ${freeLeft}.`,
+    transferStateLine,
     ``,
     `TASK: search the news, then produce this round's plan. Respond with ONLY this JSON:`,
     `{`,

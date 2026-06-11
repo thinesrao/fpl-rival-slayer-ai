@@ -8,7 +8,7 @@ import { kvGet, kvSet } from "@/lib/store/redis";
 import { getWcContext } from "@/lib/wc/context";
 import { ensureSnapshot } from "@/lib/wc/snapshot";
 import { isWcSquadState, type WcSquadState } from "@/lib/wc/squad/types";
-import { runCoach, type CoachResult } from "@/lib/wc/ai/coach";
+import { runCoach, toCoachMemory, type CoachMemory, type CoachResult } from "@/lib/wc/ai/coach";
 import { friendlyGeminiError, isTransientGeminiError } from "@/lib/wc/ai/gemini";
 
 export const runtime = "nodejs";
@@ -54,8 +54,11 @@ export async function POST(req: NextRequest) {
       if (cached) return NextResponse.json({ ...cached, cached: true });
     }
 
-    const result = await runCoach(ctx, squad);
+    const memory = await kvGet<CoachMemory>(`wc:ai:coach:memory:${uid}`);
+    const result = await runCoach(ctx, squad, memory);
     await kvSet(cacheKey, result, 15 * 60);
+    // Remember this plan for a week so the next run keeps continuity.
+    await kvSet(`wc:ai:coach:memory:${uid}`, toCoachMemory(result, ctx.target.id), 7 * 24 * 3600);
     return NextResponse.json({ ...result, cached: false });
   } catch (err) {
     console.error("[wc/ai/coach]", err);
