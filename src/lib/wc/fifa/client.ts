@@ -1,18 +1,30 @@
 // Typed client for the official FIFA World Cup 2026™ Fantasy public feed.
-// All three endpoints are unauthenticated GETs served from S3/CloudFront.
-// players.json is ~1.1MB — close enough to Next's 2MB fetch-cache item limit
-// (and growing as rounds complete) that we keep a per-process in-memory copy,
-// mirroring the FPL bootstrap pattern in src/lib/fpl/client.ts.
+// All three endpoints are unauthenticated GETs. As tournament traffic grew,
+// FIFA's CDN (Akamai) began intermittently 403'ing data-centre egress IPs
+// like Vercel's — the same bot-filter problem the FPL client documents. We
+// defend with browser-like headers AND a Redis "last known good" snapshot:
+// every successful fetch is persisted, and any 403/network failure falls back
+// to that copy (the feed is global — identical for all users — so a slightly
+// stale shared copy is far better than a 502).
 
+import { kvGet, kvSet } from "@/lib/store/redis";
 import type { WcPlayer, WcRound } from "./types";
 
 const BASE = "https://play.fifa.com/json/fantasy";
 
+// A fuller browser header set than a bare UA — Akamai's bot filter scores
+// requests on the whole header shape, not just User-Agent.
 const HEADERS: HeadersInit = {
   Accept: "application/json, text/plain, */*",
+  "Accept-Language": "en-US,en;q=0.9",
   "User-Agent":
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+  Referer: "https://play.fifa.com/fantasy/",
+  Origin: "https://play.fifa.com",
 };
+
+const LAST_GOOD_PLAYERS = "wc:lastgood:players";
+const LAST_GOOD_ROUNDS = "wc:lastgood:rounds";
 
 export class WcFeedError extends Error {
   constructor(public status: number, message: string) {
@@ -28,7 +40,9 @@ interface MemCache<T> {
 
 let playersCache: MemCache<WcPlayer[]> | null = null;
 let playersInflight: Promise<WcPlayer[]> | null = null;
+let roundsCache: MemCache<WcRound[]> | null = null;
 const PLAYERS_TTL_MS = 60 * 1000;
+const ROUNDS_TTL_MS = 90 * 1000;
 
 export function bustWcPlayers(): void {
   playersCache = null;
@@ -39,14 +53,18 @@ export async function getWcPlayers(): Promise<WcPlayer[]> {
   if (playersCache && now - playersCache.at < PLAYERS_TTL_MS) return playersCache.data;
   if (playersInflight) return playersInflight;
   playersInflight = (async () => {
-    const res = await fetch(`${BASE}/players.json`, { headers: HEADERS, cache: "no-store" });
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new WcFeedError(res.status, `FIFA feed ${res.status} players.json: ${text.slice(0, 200)}`);
+    try {
+      const res = await fetch(`${BASE}/players.json`, { headers: HEADERS, cache: "no-store" });
+      if (!res.ok) throw new WcFeedError(res.status, `players.json ${res.status}`);
+      const data = (await res.json()) as WcPlayer[];
+      playersCache = { at: Date.now(), data };
+      void kvSet(LAST_GOOD_PLAYERS, data); // shared durable fallback
+      return data;
+    } catch (err) {
+      const fallback = await loadFallback<WcPlayer[]>(playersCache, LAST_GOOD_PLAYERS);
+      if (fallback) return fallback;
+      throw asFeedError(err, "players.json");
     }
-    const data = (await res.json()) as WcPlayer[];
-    playersCache = { at: Date.now(), data };
-    return data;
   })();
   try {
     return await playersInflight;
@@ -56,15 +74,32 @@ export async function getWcPlayers(): Promise<WcPlayer[]> {
 }
 
 export async function getWcRounds(): Promise<WcRound[]> {
-  const res = await fetch(`${BASE}/rounds.json`, {
-    headers: HEADERS,
-    next: { revalidate: 120, tags: ["wc-rounds"] },
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new WcFeedError(res.status, `FIFA feed ${res.status} rounds.json: ${text.slice(0, 200)}`);
+  const now = Date.now();
+  if (roundsCache && now - roundsCache.at < ROUNDS_TTL_MS) return roundsCache.data;
+  try {
+    const res = await fetch(`${BASE}/rounds.json`, { headers: HEADERS, cache: "no-store" });
+    if (!res.ok) throw new WcFeedError(res.status, `rounds.json ${res.status}`);
+    const data = (await res.json()) as WcRound[];
+    roundsCache = { at: Date.now(), data };
+    void kvSet(LAST_GOOD_ROUNDS, data);
+    return data;
+  } catch (err) {
+    const fallback = await loadFallback<WcRound[]>(roundsCache, LAST_GOOD_ROUNDS);
+    if (fallback) return fallback;
+    throw asFeedError(err, "rounds.json");
   }
-  return (await res.json()) as WcRound[];
+}
+
+/** Prefer the in-process cache (even if past its TTL) over a Redis round-trip,
+ *  then fall back to the durable last-known-good copy. */
+async function loadFallback<T>(mem: MemCache<T> | null, redisKey: string): Promise<T | null> {
+  if (mem) return mem.data;
+  return kvGet<T>(redisKey);
+}
+
+function asFeedError(err: unknown, file: string): WcFeedError {
+  if (err instanceof WcFeedError) return err;
+  return new WcFeedError(502, `FIFA feed ${file}: ${err instanceof Error ? err.message : String(err)}`);
 }
 
 // Convenience selectors ------------------------------------------------------
