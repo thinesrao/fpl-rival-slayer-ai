@@ -1,13 +1,15 @@
 "use client";
 
 // WC26 pitch view: FUT cards on the shared stadium backdrop, nation flag as
-// the card art, price-driven tiers. Tapping a tile bubbles up for the builder
-// to act on (captain menu / swap / remove).
+// the card art. The big card number is the player's POINTS for the current
+// round (live while a match runs, final after) — FPL-style — not a price-OVR.
+// Card colour (gold/silver/bronze) still tracks price so premiums read as
+// premium at a glance.
 
 import { cn } from "@/lib/utils";
 import { FutCard } from "@/components/fut/FutCard";
 import { PitchBackdrop } from "@/components/fut/PitchBackdrop";
-import { playerTier } from "@/lib/fut/tier";
+import { playerTier, type Tier } from "@/lib/fut/tier";
 import { flagEmoji } from "@/lib/wc/flags";
 import type { WcPickerPlayer } from "./useWcData";
 
@@ -17,14 +19,15 @@ export interface WcPitchProps {
   captainId: number | null;
   viceId: number | null;
   onTileClick?: (player: WcPickerPlayer) => void;
-  /** Live round points by player id — when present, cards show points instead of fixture. */
+  /** Optional per-player points override (e.g. a specific round). Defaults to
+   *  each player's latest-round points. */
   livePoints?: Map<number, number>;
   className?: string;
 }
 
-/** Card OVR from price: $3.5m → 58, $10.5m → 96. */
-export function wcOvr(price: number): number {
-  return Math.round(58 + ((price - 3.5) / 7) * 38);
+/** Card colour tier from price ($3.5m → bronze … $10.5m → gold). */
+function priceTier(price: number): Tier {
+  return playerTier(Math.round(58 + ((price - 3.5) / 7) * 38));
 }
 
 export function WcPitch({
@@ -118,19 +121,15 @@ function Tile({
   onTileClick?: (player: WcPickerPlayer) => void;
   livePoints?: Map<number, number>;
 }) {
-  const ovr = wcOvr(player.price);
-  const live = livePoints?.get(player.id);
-  const sub =
-    live !== undefined
-      ? `${live} pts`
-      : `${player.nextOpponent ?? "—"} · $${player.price.toFixed(1)}`;
+  const points = livePoints?.get(player.id) ?? player.lastRoundPoints ?? 0;
+  const sub = `${player.nextOpponent ?? "—"} · $${player.price.toFixed(1)}`;
   const unavailable = player.status !== "playing";
 
   return (
     <div className="relative w-full">
       <FutCard
-        tier={playerTier(ovr)}
-        ovr={ovr}
+        tier={priceTier(player.price)}
+        ovr={points}
         position={player.position}
         name={player.name.split(" ").slice(-1)[0]}
         sub={sub}
