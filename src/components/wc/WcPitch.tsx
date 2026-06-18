@@ -121,7 +121,8 @@ function Tile({
   onTileClick?: (player: WcPickerPlayer) => void;
   livePoints?: Map<number, number>;
 }) {
-  const points = livePoints?.get(player.id) ?? player.lastRoundPoints ?? 0;
+  const rawPoints = livePoints?.get(player.id) ?? player.lastRoundPoints ?? 0;
+  const points = player.id === captainId ? rawPoints * 2 : rawPoints;
   const sub = `${player.nextOpponent ?? "—"} · $${player.price.toFixed(1)}`;
   const unavailable = player.status !== "playing";
 
