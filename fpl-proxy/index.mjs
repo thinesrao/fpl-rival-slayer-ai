@@ -1,23 +1,22 @@
 // Tiny CORS-adding proxy for the public Fantasy Premier League API.
 //
-// Why: FPL doesn't serve `Access-Control-Allow-Origin`, so a browser can't
-// fetch its endpoints directly. AND Vercel/Cloudflare-Worker egress IPs are
-// on FPL's bot-management block list. This proxy runs on Fly.io (whose IPs
-// FPL doesn't block as of testing) and adds CORS headers, so the Next.js
-// app can fetch FPL data straight from the browser.
+// Why: FPL doesn't serve Access-Control-Allow-Origin headers AND
+// Vercel/Cloudflare-Worker egress IPs are on FPL's bot-management block
+// list. This proxy runs on Render (free, no credit card) and adds CORS
+// headers so the Next.js server-side routes can reach FPL.
 //
-// Deploy (one-time):
-//   1. brew install flyctl && fly auth login
-//   2. cd fpl-proxy && fly launch --no-deploy --copy-config --name fpl-rival-proxy --region lhr
-//      (any region works; lhr/Heathrow is close to FPL's CDN)
-//   3. fly secrets set FPL_PROXY_SECRET=$(openssl rand -hex 24)
-//   4. fly deploy
-//   5. Visit https://fpl-rival-proxy.fly.dev/api/bootstrap-static/ → expect 200
-//      (you'll get 403 without the secret header — that's the proxy auth working)
+// Deploy on Render (one-time, ~3 min):
+//   1. Push this repo to GitHub
+//   2. Go to render.com → New → Web Service → connect this repo
+//   3. Set Root Directory to "fpl-proxy", Environment to "Docker"
+//   4. Add env var: FPL_PROXY_SECRET = <generate with: openssl rand -hex 24>
+//   5. Deploy → copy the .onrender.com URL
+//   6. In Vercel, set FPL_PROXY_URL = https://<your-service>.onrender.com
+//      and FPL_PROXY_SECRET = <same secret from step 4>
 //
-// Health check (with secret):
+// Verify:
 //   curl -H "X-FPL-Proxy-Secret: $SECRET" \
-//     https://fpl-rival-proxy.fly.dev/api/entry/942359/
+//     https://<your-service>.onrender.com/api/entry/4778037/
 
 import http from "node:http";
 

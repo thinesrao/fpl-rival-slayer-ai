@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
     // last deadline. If a player's now_cost dropped since purchase, the
     // cap would over-report by the drop amount and the implied bank
     // (cap − current squad value) would be too high. Issue surfaced
-    // for team 942359: API value=£100.1m, true cap=£99.9m, drift
+    // for team 4778037: API value=£100.1m, true cap=£99.9m, drift
     // matched two £0.1m price drops since purchase.
     const nowCostById = new Map(bs.elements.map((e) => [e.id, e.now_cost]));
     const squadValue = all.reduce((s, p) => s + (nowCostById.get(p.playerId) ?? 0), 0);

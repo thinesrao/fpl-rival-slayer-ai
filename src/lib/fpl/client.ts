@@ -12,7 +12,7 @@ import type {
 } from "@/lib/types";
 
 // Default to the canonical FPL API. When FPL_PROXY_URL is set, requests
-// instead go through that proxy (typically a Cloudflare Worker) so we can
+// instead go through that proxy (see fpl-proxy/) so we can
 // dodge data-centre IP blocks.
 const BASE = env.FPL_PROXY_URL
   ? `${env.FPL_PROXY_URL.replace(/\/$/, "")}/api`
@@ -46,8 +46,8 @@ function fplHeaders(): HeadersInit {
 function explain403(path: string, body: string): string {
   const via = env.FPL_PROXY_URL ? ` via ${env.FPL_PROXY_URL}` : "";
   const hint = env.FPL_PROXY_URL
-    ? `Check the worker logs (wrangler tail) — its egress IP may also be blocked, or FPL_PROXY_SECRET may be mismatched.`
-    : `Set FPL_PROXY_URL to a Cloudflare-Worker proxy (see worker/fpl-proxy.ts), or check that the host IP isn't on FPL's data-centre block list.`;
+    ? `Check the proxy logs — its egress IP may also be blocked, or FPL_PROXY_SECRET may be mismatched.`
+    : `Set FPL_PROXY_URL to the Render proxy (see fpl-proxy/), or check that the host IP isn't on FPL's data-centre block list.`;
   return `FPL 403 ${path}${via}: blocked by upstream bot filter. ${hint} Body: ${body.slice(0, 120)}`;
 }
 
