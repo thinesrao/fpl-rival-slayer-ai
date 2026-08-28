@@ -130,7 +130,7 @@ Everything below is pure and framework-free. Nothing imports from `next`.
 ```
 scripts/backtest.ts              CLI entry point
 src/lib/backtest/
-  csv.ts        RFC4180 parser (quoted fields, escaped quotes, embedded newlines)
+  csv.ts        RFC4180 parser; rejects rows whose field count differs from header
   corpus.ts     download, cache and manifest the vaastav gameweek CSVs
   panel.ts      assemble the player-gameweek panel, ordered by round
   features.ts   build features from rounds < t   ← leak-free by construction
@@ -145,15 +145,23 @@ src/lib/projections/
 scoring and variance together. Splitting it is part of the work, not incidental to it:
 the feature/scoring boundary is what makes the leakage guarantee expressible.
 
-### Why a parser instead of `split(",")`
+### Guarding the evaluator against degenerate inputs
 
-The naive parser silently misaligns rows whose `name` field contains a comma, which
-produces plausible-looking but wrong metrics rather than an error. This was hit
-during design: an early measurement pass reported `NaN` correlations and a pooled RMSE
-*worse* than predicting the mean, which was a parsing artefact, not a finding. Given
-this spec exists to stop the app publishing numbers it cannot justify, the harness
-must not be capable of the same failure. `csv.ts` is tested against the real
-pathological rows from the archive.
+An early measurement pass reported `NaN` rank correlations and a pooled RMSE *worse*
+than predicting the mean. The cause was not parsing, as first assumed: it was that the
+`xP` column is entirely zero in some gameweek files, so the predictor has zero
+variance and Spearman's denominator collapses. The metric was undefined, not bad.
+
+(The "commas in player names break a naive parser" theory was checked and rejected —
+across fifteen files spanning 2023-24 to 2025-26 there are **zero** quoted fields and
+**zero** rows whose field count disagrees with the header. `csv.ts` still validates
+field counts, because the upstream format is not contractual, but it is a guard rather
+than a fix for an observed bug.)
+
+The real requirement this produces: `evaluate.ts` must detect degenerate inputs —
+constant predictions, constant actuals, or an empty set — and return an explicit
+"undefined" result with a reason, never a `NaN` that flows into a report and reads as
+a number. This has its own test.
 
 ## Data
 
@@ -321,6 +329,8 @@ call made after reading the report.
 - `evaluate` refuses to report below a minimum holdout size.
 - The CSV parser rejects rows whose field count does not match the header, rather
   than producing a misaligned record.
+- `evaluate` returns an explicit undefined-with-reason result for degenerate inputs
+  (zero-variance predictions or actuals, empty sets) instead of emitting `NaN`.
 
 ## Testing
 
@@ -333,7 +343,11 @@ one dev dependency.
 - A frozen golden fixture of roughly 20 players with expected xP, so refactoring is
   safe.
 - The leakage test.
-- CSV parser tests built from the real pathological rows in the archive.
+- CSV parser tests: header/field-count mismatch is rejected; quoted fields and
+  escaped quotes parse correctly (defensive — not observed upstream, but the format
+  is not contractual).
+- Evaluator degeneracy tests: constant predictions, constant actuals, and empty input
+  each return an explicit undefined-with-reason result rather than `NaN`.
 
 Coverage target ≥80% on `src/lib/projections/` and `src/lib/backtest/`.
 
