@@ -15,6 +15,8 @@ import type { PlayerFeatures } from "@/lib/projections/features";
 import {
   ASSIST_POINTS,
   CLEAN_SHEET_POINTS,
+  DC_POINTS,
+  DC_THRESHOLD,
   GOAL_POINTS,
 } from "@/lib/projections/scoring-rules";
 
@@ -53,6 +55,34 @@ export function cleanSheetProbability(opponentXgcPer90: number): number {
   return Math.exp(-rate);
 }
 
+/**
+ * P(defensive-contribution count reaches the positional threshold).
+ *
+ * The award is a threshold crossing, not a linear scale, so this is the upper
+ * tail of a Poisson whose rate is the player's per-90 count scaled to expected
+ * minutes. Computed as 1 - P(X < threshold).
+ */
+export function dcProbability(
+  dcPer90: number,
+  position: Position,
+  expectedMinutes: number,
+): number {
+  const threshold = DC_THRESHOLD[position];
+  if (threshold === null || expectedMinutes <= 0) return 0;
+
+  const rate = Math.max(0, dcPer90) * (expectedMinutes / 90);
+  if (rate <= 0) return 0;
+
+  // Poisson CDF below the threshold, computed iteratively to avoid factorials.
+  let term = Math.exp(-rate);
+  let cdf = term;
+  for (let k = 1; k < threshold; k++) {
+    term = (term * rate) / k;
+    cdf += term;
+  }
+  return Math.max(0, Math.min(1, 1 - cdf));
+}
+
 export function scorePlayer(f: PlayerFeatures): ScoredPlayer {
   const zero: ScoreComponents = {
     appearance: 0,
@@ -81,8 +111,8 @@ export function scorePlayer(f: PlayerFeatures): ScoredPlayer {
         ? cleanSheetProbability(f.opponentXgcPer90) * CLEAN_SHEET_POINTS[f.position]
         : 0,
     bonus: Math.min(MAX_BONUS, Math.max(0, f.bps90) * BONUS_PER_BPS90 * minutesShare),
-    // Implemented in Task 7.
-    defensiveContribution: 0,
+    defensiveContribution:
+      dcProbability(f.dcPer90, f.position, expectedMinutes) * DC_POINTS,
   };
 
   const components: ScoreComponents = {

@@ -130,7 +130,42 @@ describe("scorePlayer general behaviour", () => {
     expect(scorePlayer(features({ position: "FWD" })).components.cleanSheet).toBe(0);
   });
 
-  it("leaves defensive contribution at zero until Task 7 implements it", () => {
-    expect(scorePlayer(features({ dcPer90: 30 })).components.defensiveContribution).toBe(0);
+});
+
+describe("regression: defensive contribution points are modelled", () => {
+  it("awards a defender approaching the threshold of 10 a non-zero expectation", () => {
+    const c = scorePlayer(features({ position: "DEF", dcPer90: 9.5 })).components.defensiveContribution;
+    expect(c).toBeGreaterThan(0);
+  });
+
+  it("gives a higher expectation to a defender averaging above the threshold", () => {
+    const below = scorePlayer(features({ position: "DEF", dcPer90: 6 })).components.defensiveContribution;
+    const above = scorePlayer(features({ position: "DEF", dcPer90: 14 })).components.defensiveContribution;
+    expect(above).toBeGreaterThan(below);
+  });
+
+  it("uses the higher threshold of 12 for midfielders, so a MID scores less than a DEF at the same rate", () => {
+    const def = scorePlayer(features({ position: "DEF", dcPer90: 11 })).components.defensiveContribution;
+    const mid = scorePlayer(features({ position: "MID", dcPer90: 11 })).components.defensiveContribution;
+    expect(def).toBeGreaterThan(mid);
+  });
+
+  it("never awards defensive contribution to a goalkeeper", () => {
+    expect(scorePlayer(features({ position: "GKP", dcPer90: 40 })).components.defensiveContribution).toBe(0);
+  });
+
+  it("never exceeds the 2 points actually on offer", () => {
+    expect(scorePlayer(features({ position: "DEF", dcPer90: 60 })).components.defensiveContribution)
+      .toBeLessThanOrEqual(2 + 1e-9);
+  });
+
+  it("is zero for a player expected to play no minutes", () => {
+    expect(scorePlayer(features({ position: "DEF", dcPer90: 20, minutesPerStart: 0 })).components.defensiveContribution).toBe(0);
+  });
+
+  it("raises a defender's total score relative to the pre-Task-7 model", () => {
+    const withDc = scorePlayer(features({ position: "DEF", dcPer90: 15 })).xPoints;
+    const withoutDc = scorePlayer(features({ position: "DEF", dcPer90: 0 })).xPoints;
+    expect(withDc).toBeGreaterThan(withoutDc);
   });
 });
