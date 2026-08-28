@@ -1,17 +1,34 @@
 // Adapts the live FPL bootstrap into the same PlayerFeatures shape the backtest
 // builds from history, so both paths score through scorePlayer.
 //
-// Bootstrap exposes real per-90 rates for expected goals and expected assists,
-// so xg90 and xa90 are per-player here, same as in the backtest. It exposes no
-// per-90 BPS or defensive-contribution rate, so bps90 and dcPer90 are always
-// position medians in this path — there is no per-player signal in them and
-// no fallback logic. Consequently the bonus and defensive-contribution score
-// components do not discriminate between same-position players in the live
-// app, while the backtest feeds scorePlayer real rolling per-90 values for
-// both. The two paths share the same scoring function and interface, but
-// these two components are not statistically comparable between them, so
-// backtest correlation figures should not be read as characterising live
-// ranking quality for bonus- or DC-driven differences.
+// Five of the eleven PlayerFeatures fields are produced differently on this
+// path than on the backtest path, so backtest metrics characterise the
+// harness's scoring of historical features, not live ranking quality:
+//
+// - bps90 / dcPer90: Bootstrap exposes no per-90 BPS or defensive-contribution
+//   rate, so both are always position medians here — there is no per-player
+//   signal and no fallback logic. The backtest feeds scorePlayer real rolling
+//   per-90 values for both, so the bonus and defensive-contribution score
+//   components do not discriminate between same-position players live, while
+//   they do in the backtest.
+// - minutesPerStart: hardcoded to `startRate > 0 ? 90 : 0` below, versus the
+//   backtest's mean started minutes per player. Every live starter is treated
+//   as a full 90-minute appearance (appearance points = 2, unconditional
+//   clean-sheet eligibility), regardless of how long they actually tend to
+//   play once started.
+// - startRate: FPL's `starts_per_90` (starts per 90 minutes *played*), clamped
+//   to 1, versus the backtest's fraction of rounds actually started. A player
+//   who is subbed off at half-time every week plays at "2 starts per 90
+//   minutes played" and clamps to 1.0 here, reading as a guaranteed starter.
+// - opponentXgcPer90: a synthetic linear map from fixture difficulty (FDR),
+//   versus the backtest's measured rolling expected-goals-conceded for the
+//   opponent.
+//
+// xg90 and xa90 are the two fields that DO carry real per-player signal live
+// (Bootstrap exposes real per-90 expected-goals/assists rates), matching the
+// backtest. The two paths share the same scoring function and interface, but
+// with 5 of 11 inputs diverging, backtest correlation figures should not be
+// read as characterising live ranking quality.
 
 import type { FplElement, FplFixture, FplTeam, Position } from "@/lib/types";
 import type { FixtureContext, PlayerFeatures } from "@/lib/projections/features";

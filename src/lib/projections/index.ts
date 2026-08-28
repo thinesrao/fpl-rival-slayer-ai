@@ -20,8 +20,8 @@ export async function buildProjections(
   gw: number,
 ): Promise<ProjectionsResult> {
   const fixtures = await getFixtures(gw);
-  const user = projectSquad(ctx.user, fixtures, gw, bs);
-  const rivals = ctx.rivals.map((r) => projectSquad(r, fixtures, gw, bs));
+  const user = projectSquad(ctx.user, fixtures, gw);
+  const rivals = ctx.rivals.map((r) => projectSquad(r, fixtures, gw));
   const overtake = computeOvertakeOdds(ctx, user, rivals);
   return { gw, user, rivals, overtake };
 }

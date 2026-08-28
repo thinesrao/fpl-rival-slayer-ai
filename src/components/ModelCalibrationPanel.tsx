@@ -1,21 +1,9 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-
-import type { ModelReport } from "@/lib/projections/model-report";
-
-async function fetchReport(): Promise<ModelReport> {
-  const res = await fetch("/api/model-report");
-  if (!res.ok) throw new Error(`model report unavailable (${res.status})`);
-  return (await res.json()) as ModelReport;
-}
+import { useModelReport } from "@/components/ModelTrustBadge";
 
 export function ModelCalibrationPanel() {
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["model-report"],
-    queryFn: fetchReport,
-    staleTime: 60 * 60 * 1000,
-  });
+  const { data, isLoading, isError } = useModelReport();
 
   if (isLoading) return <div className="text-sm text-muted-foreground">Loading model report…</div>;
   if (isError || !data) return null;
@@ -60,8 +48,8 @@ export function ModelCalibrationPanel() {
           <ul className="space-y-0.5 font-mono text-xs">
             {data.calibration
               .filter((b) => b.n > 0)
-              .map((b) => (
-                <li key={b.meanPredicted} className="flex justify-between">
+              .map((b, i) => (
+                <li key={i} className="flex justify-between">
                   <span>we said {b.meanPredicted.toFixed(1)}</span>
                   <span className="text-muted-foreground">
                     they scored {b.meanActual.toFixed(1)} (n={b.n})

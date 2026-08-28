@@ -11,7 +11,6 @@
 // reasoning per player.
 
 import type {
-  FplBootstrap,
   FplElement,
   FplFixture,
   FplTeam,
@@ -31,7 +30,6 @@ export interface ProjectPlayerArgs {
   position: Position;
   fixtures: FplFixture[];
   gw: number;
-  bs: FplBootstrap;
 }
 
 export function projectPlayer(args: ProjectPlayerArgs): PlayerProjection {
@@ -71,7 +69,6 @@ export function projectSquad(
   squad: ManagerSquad,
   fixtures: FplFixture[],
   gw: number,
-  bs: FplBootstrap,
 ): SquadProjection {
   const projections: Array<{ slot: SquadSlot; proj: PlayerProjection }> = squad.picks.map((slot) => ({
     slot,
@@ -81,7 +78,6 @@ export function projectSquad(
       position: slot.position,
       fixtures,
       gw,
-      bs,
     }),
   }));
 

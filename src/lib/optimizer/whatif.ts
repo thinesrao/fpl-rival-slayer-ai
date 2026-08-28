@@ -156,7 +156,7 @@ export function simulateSwap(args: SimulateSwapArgs): SwapResult {
     viceCaptain: userSquad.viceCaptain?.player.id === outId ? inSlot : userSquad.viceCaptain,
   };
 
-  const newProjection = projectSquad(patched, fixtures, gw, bs);
+  const newProjection = projectSquad(patched, fixtures, gw);
   const newOvertake = computeOvertakeOdds({ ...ctx, user: patched }, newProjection, rivalProjections);
 
   const outProj = userProjection.perPlayer.find((p) => p.playerId === outId);

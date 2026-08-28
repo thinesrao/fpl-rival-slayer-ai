@@ -372,7 +372,10 @@ Coverage target ≥80% on `src/lib/projections/` and `src/lib/backtest/`.
   correctly withholds our numbers.
 - A defensive-contribution term exists and measurably improves DEF/MID accuracy
   against the 2025-26 holdout.
-- 80% Monte-Carlo intervals achieve 78–82% empirical coverage.
+- 80% Monte-Carlo intervals achieve 78–82% empirical coverage (in-sample — variance
+  is fitted on the same predictions this coverage is measured over, so this is a
+  self-consistency check, not independent validation; a held-out split for variance
+  fitting is out of scope here).
 - A named regression test exists for each of the six defects.
 - Coverage ≥80% on both new directories.
 - `npm run backtest` reproduces a committed report from the manifest.

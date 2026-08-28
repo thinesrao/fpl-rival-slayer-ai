@@ -9,8 +9,23 @@ import { RULE_CURRENT_SEASON, buildManifest, loadGameweek, sha256, type Manifest
 import { HOLDOUT_ROUNDS, runBacktest } from "../src/lib/backtest/runner";
 import { intervalCoverage, type MetricResult } from "../src/lib/backtest/evaluate";
 import { estimateVariance, fitVariance } from "../src/lib/projections/variance";
+import {
+  SHIP_GATE_BAR,
+  evaluateShipGate,
+  type MetricSummary,
+  type ModelReport,
+} from "../src/lib/projections/model-report";
 
-const BAR = { rmse: 2.691, spearman: 0.507 };
+/** Turns a (possibly degenerate) MetricResult into the required-fields shape
+ * ModelReport expects. Throws rather than writing a report with fabricated
+ * numbers if a segment came back degenerate (empty/constant input) — that
+ * should surface as a loud failure, not a silently wrong committed file. */
+function toMetricSummary(label: string, m: MetricResult): MetricSummary {
+  if (!m.ok) {
+    throw new Error(`cannot build model report: ${label} metric is degenerate (${m.reason})`);
+  }
+  return { rmse: m.rmse, mae: m.mae, spearman: m.spearman, n: m.n };
+}
 
 function line(label: string, m: MetricResult): string {
   if (!m.ok) return `${label.padEnd(22)} n=${String(m.n).padStart(6)}  (${m.reason})`;
@@ -42,6 +57,10 @@ async function main(): Promise<void> {
   for (const [pos, m] of Object.entries(report.byPosition)) out.push("  " + line(pos, m));
   out.push("");
 
+  // Variance is fitted on this same run's predictions, and coverage below is
+  // then measured over those same rows — so coverage80 is in-sample /
+  // self-graded, not independent validation. A proper measurement needs a
+  // held-out split for variance fitting; deliberately out of scope here.
   const fittedVariance = fitVariance(
     report.predictions.map((p) => ({ position: p.position, ourXp: p.ourXp, actual: p.actual })),
   );
@@ -54,14 +73,16 @@ async function main(): Promise<void> {
   const enriched = { ...report, fittedVariance, coverage80 };
 
   const m = report.starters.model;
-  const passes = m.ok && m.rmse < BAR.rmse && m.spearman > BAR.spearman;
+  const shipGate = m.ok
+    ? evaluateShipGate({ rmse: m.rmse, spearman: m.spearman })
+    : { passes: false, rmseBar: SHIP_GATE_BAR.rmse, spearmanBar: SHIP_GATE_BAR.spearman };
   out.push(
-    `80% interval coverage (starters): ${(coverage80 * 100).toFixed(1)}%  ` +
-      `(target 78-82%)`,
+    `80% interval coverage (starters, in-sample — variance fitted on these same rows): ` +
+      `${(coverage80 * 100).toFixed(1)}%  (target 78-82%)`,
   );
   out.push(
-    `SHIP GATE: ${passes ? "PASS" : "FAIL"}  ` +
-      `(need RMSE < ${BAR.rmse} and rho > ${BAR.spearman} on starters)`,
+    `SHIP GATE: ${shipGate.passes ? "PASS" : "FAIL"}  ` +
+      `(need RMSE < ${shipGate.rmseBar} and rho > ${shipGate.spearmanBar} on starters)`,
   );
 
   const cacheDir = `.backtest/${RULE_CURRENT_SEASON}`;
@@ -87,8 +108,28 @@ async function main(): Promise<void> {
   mkdirSync(".backtest", { recursive: true });
   writeFileSync(".backtest/report.json", JSON.stringify(enriched, null, 2));
   writeFileSync(".backtest/report.txt", out.join("\n") + "\n");
+
+  // The user-facing accuracy summary. Generated from this run's own results
+  // (not hand-transcribed) so it cannot silently drift from what was measured.
+  const modelReport: ModelReport = {
+    generatedAt: new Date().toISOString(),
+    season: report.season,
+    rounds: report.roundsEvaluated,
+    starters: {
+      model: toMetricSummary("starters.model", report.starters.model),
+      fplXp: toMetricSummary("starters.fplXp", report.starters.fplXp),
+    },
+    shipGate,
+    calibration: report.calibration
+      .filter((b) => b.n > 0)
+      .map((b) => ({ meanPredicted: b.meanPredicted, meanActual: b.meanActual, n: b.n })),
+  };
+  writeFileSync("src/data/model-report.json", JSON.stringify(modelReport, null, 2) + "\n");
+
   process.stdout.write(out.join("\n") + "\n");
-  process.stdout.write("\nwrote .backtest/report.json and .backtest/report.txt\n");
+  process.stdout.write(
+    "\nwrote .backtest/report.json, .backtest/report.txt and src/data/model-report.json\n",
+  );
 }
 
 main().catch((error: unknown) => {

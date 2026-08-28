@@ -29,6 +29,7 @@ import { Odometer } from "@/components/Odometer";
 import { DraftsPanel } from "@/components/DraftsPanel";
 import { IntelPanel } from "@/components/IntelPanel";
 import { ModelCalibrationPanel } from "@/components/ModelCalibrationPanel";
+import { ModelTrustBadge } from "@/components/ModelTrustBadge";
 import { RetrospectivePanel } from "@/components/RetrospectivePanel";
 import { LivePanel } from "@/components/LivePanel";
 import { NotificationToggle } from "@/components/NotificationToggle";
@@ -328,46 +329,49 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
 
         <TabsContent value="squad" className="mt-4 space-y-4">
           {closestRival && (
-            <div className="grid grid-cols-3 gap-2 sm:gap-3">
-              <Stat
-                label="Closest rival"
-                value={closestRival.rivalName}
-                sub={`${closestRival.pointsBehind} pts ahead`}
-                back={
-                  <>
-                    <div className="font-semibold text-foreground">{closestRival.rivalName}</div>
-                    <div>Rank #{closestRival.rivalRank}</div>
-                    <div>Total {closestRival.rivalExpected.toFixed(0)} xP this GW</div>
-                    <div>You trail by {closestRival.pointsBehind} pts season-to-date</div>
-                  </>
-                }
-              />
-              <Stat
-                label="Projected XI"
-                value={`${projections.user.startingXIPoints.toFixed(1)}`}
-                sub={`σ ${projections.user.stdev.toFixed(1)}`}
-                back={
-                  <>
-                    <div className="font-semibold text-foreground">Your starting XI xP</div>
-                    <div>Sum of per-player xP including captain multiplier</div>
-                    <div>σ = Monte-Carlo standard deviation</div>
-                    <div>Higher σ = noisier swing potential</div>
-                  </>
-                }
-              />
-              <Stat
-                label="Overtake odds"
-                value={`${Math.round(closestRival.overtakeProbability * 100)}%`}
-                sub={`xP Δ ${closestRival.expectedDelta > 0 ? "+" : ""}${closestRival.expectedDelta.toFixed(1)}`}
-                back={
-                  <>
-                    <div className="font-semibold text-foreground">Single-GW overtake</div>
-                    <div>P(your score &gt; {closestRival.rivalName}&apos;s) over one GW</div>
-                    <div>Expected delta: {closestRival.expectedDelta >= 0 ? "+" : ""}{closestRival.expectedDelta.toFixed(1)} xP</div>
-                    <div>50%+ = even-money territory</div>
-                  </>
-                }
-              />
+            <div className="space-y-1.5">
+              <ModelTrustBadge />
+              <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                <Stat
+                  label="Closest rival"
+                  value={closestRival.rivalName}
+                  sub={`${closestRival.pointsBehind} pts ahead`}
+                  back={
+                    <>
+                      <div className="font-semibold text-foreground">{closestRival.rivalName}</div>
+                      <div>Rank #{closestRival.rivalRank}</div>
+                      <div>Total {closestRival.rivalExpected.toFixed(0)} xP this GW</div>
+                      <div>You trail by {closestRival.pointsBehind} pts season-to-date</div>
+                    </>
+                  }
+                />
+                <Stat
+                  label="Projected XI"
+                  value={`${projections.user.startingXIPoints.toFixed(1)}`}
+                  sub={`σ ${projections.user.stdev.toFixed(1)}`}
+                  back={
+                    <>
+                      <div className="font-semibold text-foreground">Your starting XI xP</div>
+                      <div>Sum of per-player xP including captain multiplier</div>
+                      <div>σ = Monte-Carlo standard deviation</div>
+                      <div>Higher σ = noisier swing potential</div>
+                    </>
+                  }
+                />
+                <Stat
+                  label="Overtake odds"
+                  value={`${Math.round(closestRival.overtakeProbability * 100)}%`}
+                  sub={`xP Δ ${closestRival.expectedDelta > 0 ? "+" : ""}${closestRival.expectedDelta.toFixed(1)}`}
+                  back={
+                    <>
+                      <div className="font-semibold text-foreground">Single-GW overtake</div>
+                      <div>P(your score &gt; {closestRival.rivalName}&apos;s) over one GW</div>
+                      <div>Expected delta: {closestRival.expectedDelta >= 0 ? "+" : ""}{closestRival.expectedDelta.toFixed(1)} xP</div>
+                      <div>50%+ = even-money territory</div>
+                    </>
+                  }
+                />
+              </div>
             </div>
           )}
           <MySquadLivePanel teamId={teamId} leagueId={leagueId} refreshSignal={refreshSignal} />

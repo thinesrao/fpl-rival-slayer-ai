@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import type {
-  FplBootstrap,
   FplElement,
   FplFixture,
   FplPick,
@@ -30,21 +29,20 @@ function element(overrides: Partial<FplElement> = {}): FplElement {
 }
 
 const team = { id: 1, name: "T", short_name: "T" } as FplTeam;
-const bs = { elements: [], teams: [], events: [], element_types: [] } as unknown as FplBootstrap;
 const fixtures = [
   { id: 1, event: 10, team_h: 1, team_a: 2, team_h_difficulty: 2, team_a_difficulty: 4, finished: false },
 ] as unknown as FplFixture[];
 
 describe("projectPlayer public contract", () => {
   it("returns every field consumers depend on", () => {
-    const p = projectPlayer({ player: element(), team, position: "MID", fixtures, gw: 10, bs });
+    const p = projectPlayer({ player: element(), team, position: "MID", fixtures, gw: 10 });
     expect(Object.keys(p).sort()).toEqual(
       ["fixtureDifficulty", "injuryRisk", "notes", "playerId", "position", "variance", "webName", "xPoints"].sort(),
     );
   });
 
   it("keeps xPoints a finite non-negative number", () => {
-    const p = projectPlayer({ player: element(), team, position: "MID", fixtures, gw: 10, bs });
+    const p = projectPlayer({ player: element(), team, position: "MID", fixtures, gw: 10 });
     expect(Number.isFinite(p.xPoints)).toBe(true);
     expect(p.xPoints).toBeGreaterThanOrEqual(0);
   });
@@ -52,13 +50,13 @@ describe("projectPlayer public contract", () => {
   it("reports injuryRisk as 1 minus availability", () => {
     const p = projectPlayer({
       player: element({ chance_of_playing_next_round: 25 }),
-      team, position: "MID", fixtures, gw: 10, bs,
+      team, position: "MID", fixtures, gw: 10,
     });
     expect(p.injuryRisk).toBeCloseTo(0.75, 5);
   });
 
   it("notes a blank gameweek", () => {
-    const p = projectPlayer({ player: element(), team, position: "MID", fixtures: [], gw: 10, bs });
+    const p = projectPlayer({ player: element(), team, position: "MID", fixtures: [], gw: 10 });
     expect(p.notes.join(" ")).toMatch(/blank/i);
     expect(p.xPoints).toBe(0);
   });
@@ -66,13 +64,13 @@ describe("projectPlayer public contract", () => {
   it("notes an availability doubt", () => {
     const p = projectPlayer({
       player: element({ chance_of_playing_next_round: 50, news: "Knock" }),
-      team, position: "MID", fixtures, gw: 10, bs,
+      team, position: "MID", fixtures, gw: 10,
     });
     expect(p.notes.join(" ")).toMatch(/50%/);
   });
 
   it("uses the residual-fitted variance rather than a positional constant", () => {
-    const p = projectPlayer({ player: element(), team, position: "MID", fixtures, gw: 10, bs });
+    const p = projectPlayer({ player: element(), team, position: "MID", fixtures, gw: 10 });
     expect(p.variance).toBeGreaterThan(0);
   });
 
@@ -91,7 +89,6 @@ describe("projectPlayer public contract", () => {
       position: "DEF",
       fixtures: tripleFixtures,
       gw: 10,
-      bs,
     });
     expect(p.notes.join(" ")).toMatch(/defensive-contribution threat/i);
   });
@@ -130,7 +127,7 @@ describe("projectSquad", () => {
       activeChip: null,
     };
 
-    const proj = projectSquad(squad, fixtures, 10, bs);
+    const proj = projectSquad(squad, fixtures, 10);
 
     expect(proj.entryId).toBe(1);
     expect(proj.perPlayer).toHaveLength(3);
@@ -158,7 +155,7 @@ describe("projectSquad", () => {
       activeChip: null,
     };
 
-    const proj = projectSquad(squad, fixtures, 10, bs);
+    const proj = projectSquad(squad, fixtures, 10);
     expect(proj.startingXIPoints).toBe(0);
     expect(proj.stdev).toBe(0);
   });

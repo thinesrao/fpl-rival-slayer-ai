@@ -56,7 +56,6 @@ export function suggestTransfers(
       position: slot.position,
       fixtures,
       gw,
-      bs,
     }),
   }));
 
@@ -69,7 +68,7 @@ export function suggestTransfers(
     const pos = POS_BY_ID[p.element_type];
     const team = teamsById.get(p.team);
     if (!team) continue;
-    const proj = projectPlayer({ player: p, team, position: pos, fixtures, gw, bs });
+    const proj = projectPlayer({ player: p, team, position: pos, fixtures, gw });
     if (!candidatePoolByPos.has(pos)) candidatePoolByPos.set(pos, []);
     candidatePoolByPos.get(pos)!.push({ player: p, xPts: proj.xPoints });
   }

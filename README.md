@@ -123,15 +123,24 @@ vars are set (never their values). Start here when FPL data stops loading.
 
 - Free-transfer count is not exposed by the public FPL API per gameweek, so the AI defaults to 1 free transfer. Use the prompt context if you have more banked.
 - The xP model is intentionally closed-form (not the full XGBoost ensemble from OpenFPL) so it runs server-side in Next.js without any ML runtime.
-- **The xP model has known defects and has never been backtested.** An audit on
-  2026-08-27 found that minutes probability is applied twice, the form term
-  double-counts output already captured by the xG/xA/bonus terms, the bonus term reads
-  a season-cumulative ICT index and stops discriminating between players partway
-  through a season, fixture difficulty is applied three times, and there is no
-  defensive-contribution term despite that scoring category existing since 2025-26.
-  Monte-Carlo variance — and therefore the published overtake probability — rests on a
-  hand-picked constant. Treat the numbers as directional at best until
-  `docs/superpowers/specs/2026-08-27-trust-foundation-design.md` is implemented.
+- **The xP model is now backtested, but does not yet beat FPL's own expected points.**
+  An audit on 2026-08-27 found six defects — minutes probability applied twice, a form
+  term double-counting the xG/xA/bonus terms, a bonus term reading a season-cumulative
+  ICT index that stopped discriminating between players partway through a season,
+  fixture difficulty applied three times, and no defensive-contribution term despite
+  that scoring category existing since 2025-26. All six are fixed. Monte-Carlo
+  variance is no longer a hand-picked constant — it is fitted from historical
+  residuals, bucketed by predicted points and position (`src/lib/projections/variance.ts`).
+  The model is validated against a held-out set of 2025-26 gameweeks via
+  `npm run backtest`, which reproduces the measurement and regenerates
+  `src/data/model-report.json`; `/api/model-report` serves that summary and the
+  in-app calibration panel renders it. On that holdout, our model currently scores
+  RMSE 3.402 / Spearman 0.158 on starters, versus FPL's own published xP at
+  RMSE 2.633 / Spearman 0.529 — FPL's figure is still more accurate. A "ship gate"
+  (`src/lib/projections/model-report.ts`) tracks this and intentionally fails while
+  that remains true. Until the gate passes, treat the projections in this app as
+  directional rather than decisive; the UI surfaces this next to the relevant
+  numbers when the gate is failing.
 
 ## License
 
