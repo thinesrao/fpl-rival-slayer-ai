@@ -7,7 +7,8 @@ import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 
 import { RULE_CURRENT_SEASON, buildManifest, loadGameweek, sha256, type ManifestEntry } from "../src/lib/backtest/corpus";
 import { HOLDOUT_ROUNDS, runBacktest } from "../src/lib/backtest/runner";
-import type { MetricResult } from "../src/lib/backtest/evaluate";
+import { intervalCoverage, type MetricResult } from "../src/lib/backtest/evaluate";
+import { estimateVariance, fitVariance } from "../src/lib/projections/variance";
 
 const BAR = { rmse: 2.691, spearman: 0.507 };
 
@@ -41,8 +42,23 @@ async function main(): Promise<void> {
   for (const [pos, m] of Object.entries(report.byPosition)) out.push("  " + line(pos, m));
   out.push("");
 
+  const fittedVariance = fitVariance(
+    report.predictions.map((p) => ({ position: p.position, ourXp: p.ourXp, actual: p.actual })),
+  );
+  const starters = report.predictions.filter((p) => p.started);
+  const coverage80 = intervalCoverage(
+    starters.map((p) => p.ourXp),
+    starters.map((p) => Math.sqrt(estimateVariance(p.position, p.ourXp, fittedVariance))),
+    starters.map((p) => p.actual),
+  );
+  const enriched = { ...report, fittedVariance, coverage80 };
+
   const m = report.starters.model;
   const passes = m.ok && m.rmse < BAR.rmse && m.spearman > BAR.spearman;
+  out.push(
+    `80% interval coverage (starters): ${(coverage80 * 100).toFixed(1)}%  ` +
+      `(target 78-82%)`,
+  );
   out.push(
     `SHIP GATE: ${passes ? "PASS" : "FAIL"}  ` +
       `(need RMSE < ${BAR.rmse} and rho > ${BAR.spearman} on starters)`,
@@ -69,7 +85,7 @@ async function main(): Promise<void> {
   writeFileSync("docs/backtest-manifest.json", buildManifest(entries));
 
   mkdirSync(".backtest", { recursive: true });
-  writeFileSync(".backtest/report.json", JSON.stringify(report, null, 2));
+  writeFileSync(".backtest/report.json", JSON.stringify(enriched, null, 2));
   writeFileSync(".backtest/report.txt", out.join("\n") + "\n");
   process.stdout.write(out.join("\n") + "\n");
   process.stdout.write("\nwrote .backtest/report.json and .backtest/report.txt\n");
