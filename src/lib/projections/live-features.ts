@@ -1,9 +1,17 @@
 // Adapts the live FPL bootstrap into the same PlayerFeatures shape the backtest
 // builds from history, so both paths score through scorePlayer.
 //
-// Bootstrap exposes per-90 rates directly, so no rolling window is needed here.
-// bps90 and dcPer90 are not available per-90 from bootstrap; they are derived
-// from the season aggregates that are, and fall back to position medians.
+// Bootstrap exposes real per-90 rates for expected goals and expected assists,
+// so xg90 and xa90 are per-player here, same as in the backtest. It exposes no
+// per-90 BPS or defensive-contribution rate, so bps90 and dcPer90 are always
+// position medians in this path — there is no per-player signal in them and
+// no fallback logic. Consequently the bonus and defensive-contribution score
+// components do not discriminate between same-position players in the live
+// app, while the backtest feeds scorePlayer real rolling per-90 values for
+// both. The two paths share the same scoring function and interface, but
+// these two components are not statistically comparable between them, so
+// backtest correlation figures should not be read as characterising live
+// ranking quality for bonus- or DC-driven differences.
 
 import type { FplElement, FplFixture, FplTeam, Position } from "@/lib/types";
 import type { FixtureContext, PlayerFeatures } from "@/lib/projections/features";
