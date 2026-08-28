@@ -75,6 +75,21 @@ vercel
 
 Set `GEMINI_API_KEY` in the Vercel project's environment variables. Everything else just works — the API routes use Node.js runtime and the dynamic FPL fetches use in-memory + Next.js fetch-cache hints to stay friendly to the FPL API.
 
+> **Commits must be signed.** This project has *Require Verified Commits* enabled in
+> Vercel (Settings → Git). Unsigned commits are refused silently — no deployment is
+> created and no GitHub check appears, so it looks like the integration is broken
+> rather than like a rejected commit. Configure signing once:
+>
+> ```bash
+> git config gpg.format ssh
+> git config user.signingkey ~/.ssh/id_ed25519.pub
+> git config commit.gpgsign true
+> ```
+>
+> The same public key must be added at **github.com → Settings → SSH and GPG keys →
+> New SSH key** with key type **Signing Key** (an authentication key of the same name
+> does not count). Verify with `git log --show-signature -1`.
+
 ## How the AI Coach stays current
 
 Every recommendation call:
@@ -84,10 +99,39 @@ Every recommendation call:
 3. Hands a structured digest to Gemini with the system prompt "elite FPL mini-league strategist" and the **`googleSearch` tool enabled**.
 4. Gemini is instructed to search the web for the latest injury/training/press-conference news for every named player it considers, then return a JSON envelope with transfers, captain, chip strategy, differentials, and `news_citations` with the source URLs surfaced via grounding metadata.
 
+## Troubleshooting network access
+
+FPL fronts its API with Cloudflare bot management, which challenges data-centre
+egress. Vercel's AWS ranges were blocked in May 2026; the Cloudflare Worker built to
+dodge that was itself blocked in August 2026. There is no browser-side workaround —
+FPL sends no CORS headers on any endpoint, so a server-side hop is mandatory.
+
+The client therefore does not bind to one network path. `src/lib/fpl/origins.ts`
+keeps an ordered list (direct, then `FPL_PROXY_URL` if set), fails over on 403/429/451
+and on network errors, and remembers which path worked so steady-state traffic costs
+one request rather than a wasted probe.
+
+```bash
+curl -s https://<deployment>/api/diag | jq
+```
+
+`GET /api/diag` probes every configured origin in parallel and reports status, latency
+and whether the body is JSON or a Cloudflare challenge, plus booleans for which env
+vars are set (never their values). Start here when FPL data stops loading.
+
 ## Limitations
 
 - Free-transfer count is not exposed by the public FPL API per gameweek, so the AI defaults to 1 free transfer. Use the prompt context if you have more banked.
-- The xP model is intentionally closed-form (not the full XGBoost ensemble from OpenFPL) so it runs server-side in Next.js without any ML runtime. It performs well in practice as a "directional" projection and feeds Gemini with structured signals.
+- The xP model is intentionally closed-form (not the full XGBoost ensemble from OpenFPL) so it runs server-side in Next.js without any ML runtime.
+- **The xP model has known defects and has never been backtested.** An audit on
+  2026-08-27 found that minutes probability is applied twice, the form term
+  double-counts output already captured by the xG/xA/bonus terms, the bonus term reads
+  a season-cumulative ICT index and stops discriminating between players partway
+  through a season, fixture difficulty is applied three times, and there is no
+  defensive-contribution term despite that scoring category existing since 2025-26.
+  Monte-Carlo variance — and therefore the published overtake probability — rests on a
+  hand-picked constant. Treat the numbers as directional at best until
+  `docs/superpowers/specs/2026-08-27-trust-foundation-design.md` is implemented.
 
 ## License
 

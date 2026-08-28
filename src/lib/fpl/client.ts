@@ -1,8 +1,10 @@
 // Typed client for the public Fantasy Premier League API.
 // All endpoints are unauthenticated GETs. We rely on Next.js fetch cache for
 // dedupe + revalidation so each route handler call cheaply hits the same data.
+//
+// Network-path selection (direct vs proxy) and failover live in ./origins.
 
-import { env } from "@/lib/env";
+import { FplBlockedError, fetchFpl } from "@/lib/fpl/origins";
 import type {
   FplBootstrap,
   FplEntry,
@@ -11,58 +13,24 @@ import type {
   FplPicksResponse,
 } from "@/lib/types";
 
-// Default to the canonical FPL API. When FPL_PROXY_URL is set, requests
-// instead go through that proxy (typically a Cloudflare Worker) so we can
-// dodge data-centre IP blocks.
-const BASE = env.FPL_PROXY_URL
-  ? `${env.FPL_PROXY_URL.replace(/\/$/, "")}/api`
-  : "https://fantasy.premierleague.com/api";
-
 type CacheOpts = { revalidate: number; tags?: string[] };
 
 const CACHE_FIXTURES: CacheOpts = { revalidate: 3600, tags: ["fpl-fixtures"] };
 const CACHE_LIVE: CacheOpts = { revalidate: 300, tags: ["fpl-live"] }; // standings/picks/entry
 const CACHE_ELEMENT_SUMMARY: CacheOpts = { revalidate: 900, tags: ["fpl-element-summary"] };
 
-// Browser-like headers — FPL's bot filter 403s anything that looks
-// like a generic HTTP client. Keep the set tight: UA + the common
-// browser navigation headers a Chrome request would include.
-// The proxy worker re-adds these on its end too; sending them here makes
-// the direct-mode (no proxy) path work for local dev.
-function fplHeaders(): HeadersInit {
-  const h: Record<string, string> = {
-    "User-Agent": env.FPL_USER_AGENT,
-    Accept: "application/json, text/plain, */*",
-    "Accept-Language": "en-GB,en;q=0.9",
-    Referer: "https://fantasy.premierleague.com/",
-    Origin: "https://fantasy.premierleague.com",
-  };
-  if (env.FPL_PROXY_URL && env.FPL_PROXY_SECRET) {
-    h["X-FPL-Proxy-Secret"] = env.FPL_PROXY_SECRET;
-  }
-  return h;
-}
-
-function explain403(path: string, body: string): string {
-  const via = env.FPL_PROXY_URL ? ` via ${env.FPL_PROXY_URL}` : "";
-  const hint = env.FPL_PROXY_URL
-    ? `Check the worker logs (wrangler tail) — its egress IP may also be blocked, or FPL_PROXY_SECRET may be mismatched.`
-    : `Set FPL_PROXY_URL to a Cloudflare-Worker proxy (see worker/fpl-proxy.ts), or check that the host IP isn't on FPL's data-centre block list.`;
-  return `FPL 403 ${path}${via}: blocked by upstream bot filter. ${hint} Body: ${body.slice(0, 120)}`;
-}
-
 async function fplFetch<T>(path: string, cache: CacheOpts): Promise<T> {
-  const url = `${BASE}${path}`;
-  const res = await fetch(url, {
-    headers: fplHeaders(),
-    next: { revalidate: cache.revalidate, tags: cache.tags },
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    if (res.status === 403) throw new FplError(403, explain403(path, text));
-    throw new FplError(res.status, `FPL ${res.status} ${path}: ${text.slice(0, 200)}`);
+  try {
+    const res = await fetchFpl(path, { next: { revalidate: cache.revalidate, tags: cache.tags } });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new FplError(res.status, `FPL ${res.status} ${path}: ${text.slice(0, 200)}`);
+    }
+    return (await res.json()) as T;
+  } catch (error) {
+    if (error instanceof FplBlockedError) throw new FplError(error.status, error.message);
+    throw error;
   }
-  return (await res.json()) as T;
 }
 
 // bootstrap-static is ~2.6MB which exceeds Next's 2MB fetch-cache item limit,
@@ -87,19 +55,19 @@ export async function getBootstrap(): Promise<FplBootstrap> {
   if (bootstrapCache && now - bootstrapCache.at < BOOTSTRAP_TTL_MS) return bootstrapCache.data;
   if (bootstrapInflight) return bootstrapInflight;
   bootstrapInflight = (async () => {
-    const url = `${BASE}/bootstrap-static/`;
-    const res = await fetch(url, {
-      headers: fplHeaders(),
-      cache: "no-store",
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      if (res.status === 403) throw new FplError(403, explain403("/bootstrap-static/", text));
-      throw new FplError(res.status, `FPL ${res.status} bootstrap-static: ${text.slice(0, 200)}`);
+    try {
+      const res = await fetchFpl("/bootstrap-static/", { cache: "no-store" });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new FplError(res.status, `FPL ${res.status} bootstrap-static: ${text.slice(0, 200)}`);
+      }
+      const data = (await res.json()) as FplBootstrap;
+      bootstrapCache = { at: Date.now(), data };
+      return data;
+    } catch (error) {
+      if (error instanceof FplBlockedError) throw new FplError(error.status, error.message);
+      throw error;
     }
-    const data = (await res.json()) as FplBootstrap;
-    bootstrapCache = { at: Date.now(), data };
-    return data;
   })();
   try {
     return await bootstrapInflight;
