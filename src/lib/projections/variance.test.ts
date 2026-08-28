@@ -65,3 +65,43 @@ describe("fitVariance", () => {
     expect(Number.isNaN(estimateVariance("MID", 3, table))).toBe(false);
   });
 });
+
+describe("regression: thin evidence must widen, not collapse to the floor", () => {
+  const POSITIONS: Position[] = ["GKP", "DEF", "MID", "FWD"];
+
+  it("does not let an empty high bucket return a smaller variance than a populated lower bucket", () => {
+    // DEF has plenty of samples with real spread at xPoints=7, and zero
+    // samples at xPoints=11 (a double-gameweek-sized projection).
+    const table = fitVariance(
+      Array.from({ length: 42 }, (_, i) => sample("DEF", 7, 7 + (i % 2 ? 4.29 : -4.29))),
+    );
+    expect(estimateVariance("DEF", 11, table)).toBeGreaterThanOrEqual(
+      estimateVariance("DEF", 7, table),
+    );
+  });
+
+  it("is monotonic non-decreasing across buckets for every position", () => {
+    const table = fitVariance([
+      ...Array.from({ length: 30 }, (_, i) => sample("MID", 2, 2 + (i % 2 ? 1 : -1))),
+      ...Array.from({ length: 30 }, (_, i) => sample("MID", 9, 9 + (i % 2 ? 6 : -6))),
+      ...Array.from({ length: 25 }, (_, i) => sample("FWD", 3, 3 + (i % 2 ? 3 : -3))),
+      sample("FWD", 9, 30), // single outlier residual in an otherwise-thin bucket
+    ]);
+    for (const position of POSITIONS) {
+      const row = table.byPosition[position];
+      for (let i = 1; i < row.length; i++) {
+        expect(row[i]).toBeGreaterThanOrEqual(row[i - 1]);
+      }
+    }
+  });
+
+  it("does not let a single-sample bucket produce a value below its lower neighbour", () => {
+    const table = fitVariance([
+      ...Array.from({ length: 25 }, (_, i) => sample("FWD", 3, 3 + (i % 2 ? 3 : -3))),
+      sample("FWD", 9, 30), // one huge squared residual, n=1 for its bucket
+    ]);
+    const lowerBucketVariance = estimateVariance("FWD", 3, table);
+    const singleSampleBucketVariance = estimateVariance("FWD", 9, table);
+    expect(singleSampleBucketVariance).toBeGreaterThanOrEqual(lowerBucketVariance);
+  });
+});
