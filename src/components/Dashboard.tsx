@@ -28,6 +28,7 @@ import { FlipCard } from "@/components/FlipCard";
 import { Odometer } from "@/components/Odometer";
 import { DraftsPanel } from "@/components/DraftsPanel";
 import { IntelPanel } from "@/components/IntelPanel";
+import { ModelCalibrationPanel } from "@/components/ModelCalibrationPanel";
 import { RetrospectivePanel } from "@/components/RetrospectivePanel";
 import { LivePanel } from "@/components/LivePanel";
 import { NotificationToggle } from "@/components/NotificationToggle";
@@ -375,7 +376,8 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
             <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground">
               Past gameweeks <span className="ml-1 text-[10px] uppercase tracking-widest opacity-60">tap to expand</span>
             </summary>
-            <div className="border-t p-3 md:p-4">
+            <div className="border-t p-3 md:p-4 space-y-3">
+              <ModelCalibrationPanel />
               <RetrospectivePanel teamId={teamId} leagueId={leagueId} />
             </div>
           </details>
