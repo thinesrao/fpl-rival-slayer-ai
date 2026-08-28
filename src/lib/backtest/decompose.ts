@@ -6,6 +6,7 @@
 
 import type { PanelRow } from "@/lib/backtest/types";
 import {
+  ASSIST_POINTS,
   CLEAN_SHEET_POINTS,
   DC_POINTS,
   DC_THRESHOLD,
@@ -36,7 +37,7 @@ export function decomposeActualPoints(row: PanelRow): PointsBreakdown {
   const parts = {
     appearance: row.minutes === 0 ? 0 : played60 ? 2 : 1,
     goals: row.goalsScored * GOAL_POINTS[row.position],
-    assists: row.assists * 3,
+    assists: row.assists * ASSIST_POINTS,
     cleanSheet: played60 && row.cleanSheets > 0 ? CLEAN_SHEET_POINTS[row.position] : 0,
     concededPenalty: concedes ? -Math.floor(row.goalsConceded / 2) : 0,
     saves: Math.floor(row.saves / 3),
