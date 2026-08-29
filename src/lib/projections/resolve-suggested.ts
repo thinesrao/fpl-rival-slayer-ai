@@ -125,7 +125,7 @@ export function resolveSuggestedSquad(args: ResolveArgs): SuggestedSquadResolved
     if (userIds.has(el.id) && xpByPlayerId.has(el.id)) {
       xPoints = xpByPlayerId.get(el.id) ?? 0;
     } else if (team) {
-      xPoints = projectPlayer({ player: el, team, position, fixtures, gw, bs }).xPoints;
+      xPoints = projectPlayer({ player: el, team, position, fixtures, gw }).xPoints;
     } else {
       xPoints = 0;
     }

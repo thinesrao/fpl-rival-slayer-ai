@@ -57,7 +57,7 @@ export function rankReplacements(args: RankReplacementsArgs): SwapCandidate[] {
     if ((teamCounts.get(p.team) ?? 0) >= 3) continue;
     const team = teamsById.get(p.team);
     if (!team) continue;
-    const proj = projectPlayer({ player: p, team, position: targetPos, fixtures, gw, bs });
+    const proj = projectPlayer({ player: p, team, position: targetPos, fixtures, gw });
     out.push({
       playerId: p.id,
       webName: p.web_name,

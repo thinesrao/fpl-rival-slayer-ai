@@ -84,7 +84,7 @@ export async function GET(req: NextRequest) {
     const userOnlyEnriched = differentials.userOnly.slice(0, 6).map((s) => ({
       name: s.player.web_name,
       team: s.team.short_name,
-      xPts: projectPlayer({ player: s.player, team: s.team, position: s.position, fixtures, gw: targetGw, bs }).xPoints,
+      xPts: projectPlayer({ player: s.player, team: s.team, position: s.position, fixtures, gw: targetGw }).xPoints,
     }));
     const rivalOnlyEnriched = differentials.rivalOnly.slice(0, 8).map((r) => ({
       name: r.slot.player.web_name,
@@ -96,7 +96,6 @@ export async function GET(req: NextRequest) {
         position: r.slot.position,
         fixtures,
         gw: targetGw,
-        bs,
       }).xPoints,
     }));
 

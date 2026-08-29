@@ -1,0 +1,85 @@
+{
+  "generatedAt": "2026-08-29T08:23:20.341Z",
+  "season": "2025-26",
+  "rounds": [
+    4,
+    5,
+    6,
+    8,
+    9,
+    24,
+    29,
+    38
+  ],
+  "starters": {
+    "model": {
+      "rmse": 3.3300014397323614,
+      "mae": 2.3387729976980207,
+      "spearman": 0.1546573132706379,
+      "n": 1733
+    },
+    "fplXp": {
+      "rmse": 2.63344819388755,
+      "mae": 1.9057524694944803,
+      "spearman": 0.5287312941767552,
+      "n": 1721
+    }
+  },
+  "shipGate": {
+    "passes": false,
+    "rmseBar": 2.691,
+    "spearmanBar": 0.507
+  },
+  "calibration": [
+    {
+      "meanPredicted": 0.48044269924940547,
+      "meanActual": 3.1343283582089554,
+      "n": 201
+    },
+    {
+      "meanPredicted": 1.2875476852213583,
+      "meanActual": 3.0541871921182264,
+      "n": 203
+    },
+    {
+      "meanPredicted": 2.037893841905914,
+      "meanActual": 2.965217391304348,
+      "n": 230
+    },
+    {
+      "meanPredicted": 2.8148421060506275,
+      "meanActual": 3.454054054054054,
+      "n": 370
+    },
+    {
+      "meanPredicted": 3.510284359168954,
+      "meanActual": 3.675603217158177,
+      "n": 373
+    },
+    {
+      "meanPredicted": 4.231277503591341,
+      "meanActual": 4.091633466135458,
+      "n": 251
+    },
+    {
+      "meanPredicted": 4.92927436116054,
+      "meanActual": 4.925,
+      "n": 80
+    },
+    {
+      "meanPredicted": 5.7244492365582005,
+      "meanActual": 4.933333333333334,
+      "n": 15
+    },
+    {
+      "meanPredicted": 6.4972041711041255,
+      "meanActual": 5.571428571428571,
+      "n": 7
+    },
+    {
+      "meanPredicted": 7.51879093905178,
+      "meanActual": 9,
+      "n": 3
+    }
+  ]
+}

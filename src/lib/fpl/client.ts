@@ -169,6 +169,10 @@ export interface FplLiveElement {
     in_dreamteam: boolean;
     /** 25/26+ FPL stat (CBI + tackles + recoveries). Absent on older seasons. */
     defensive_contribution?: number;
+    /** Present on the live endpoint; optional because older/partial responses may omit them. */
+    starts?: number;
+    expected_goals?: number;
+    expected_assists?: number;
   };
 }
 

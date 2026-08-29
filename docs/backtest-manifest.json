@@ -1,0 +1,271 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "season": "2025-26",
+      "round": 1,
+      "rows": 692,
+      "sha256": "3e5a6151421ee1220a79c7aa1720bd0228d4f37da62c72570f2e81e42b1af836",
+      "hasXp": true
+    },
+    {
+      "season": "2025-26",
+      "round": 2,
+      "rows": 706,
+      "sha256": "c598eb07f2f9ac58e7d247656a9a2e52c8453743c654071876618104efbe79a7",
+      "hasXp": true
+    },
+    {
+      "season": "2025-26",
+      "round": 3,
+      "rows": 713,
+      "sha256": "4438261d3e2fa97f03234312a220d946c657ea7fc3f84b3bc619f01aaed87a97",
+      "hasXp": true
+    },
+    {
+      "season": "2025-26",
+      "round": 4,
+      "rows": 741,
+      "sha256": "595826b96c6d0966e8a52e4eb0ebe12a7b7976467aa872b8e22129deb6107286",
+      "hasXp": true
+    },
+    {
+      "season": "2025-26",
+      "round": 5,
+      "rows": 742,
+      "sha256": "ddf160a7c0776525c7dfdb60049c8dcb3cc05e0c5cb38c2fa86d99ae7f8653fb",
+      "hasXp": true
+    },
+    {
+      "season": "2025-26",
+      "round": 6,
+      "rows": 743,
+      "sha256": "012f3d6912a23f4a794e1544132b3db77557ef16f7bc983cf99c7bb5221e88d3",
+      "hasXp": true
+    },
+    {
+      "season": "2025-26",
+      "round": 7,
+      "rows": 744,
+      "sha256": "550c089d3a652935ea48c87f719c4ba869424328f02545591fb983ac9590d16a",
+      "hasXp": false
+    },
+    {
+      "season": "2025-26",
+      "round": 8,
+      "rows": 746,
+      "sha256": "bc573bf1474207616bfb6c87cbb53c4739057b1c9eb91b837ae3c8b820530c99",
+      "hasXp": true
+    },
+    {
+      "season": "2025-26",
+      "round": 9,
+      "rows": 747,
+      "sha256": "a422373c5f5a2dae2940658d280af9f07442efb54d20ad0c9136fe9dd4d75cc0",
+      "hasXp": true
+    },
+    {
+      "season": "2025-26",
+      "round": 10,
+      "rows": 747,
+      "sha256": "9b418724e5c7bdc13c753fbcad7b66bac7647f20ebb147847837aba57da29ca8",
+      "hasXp": false
+    },
+    {
+      "season": "2025-26",
+      "round": 11,
+      "rows": 752,
+      "sha256": "b44867a1361cbeff1dfd7393273c7892bd8232b0742aef0c62a625b674040360",
+      "hasXp": false
+    },
+    {
+      "season": "2025-26",
+      "round": 12,
+      "rows": 755,
+      "sha256": "ff1e8cd0059bc0f0ef9ae34c0fc08f453951e07b9fa704ed0cfb0ca3cca7067f",
+      "hasXp": false
+    },
+    {
+      "season": "2025-26",
+      "round": 13,
+      "rows": 755,
+      "sha256": "820a86d49f017ef31305df10fb7755d983e52b2d0bcf32966ec007402eeb0329",
+      "hasXp": false
+    },
+    {
+      "season": "2025-26",
+      "round": 14,
+      "rows": 758,
+      "sha256": "5c7a750ef26ae48ee64802a487ebfed18e79daee3d6a6db42c07805e418a6cd3",
+      "hasXp": false
+    },
+    {
+      "season": "2025-26",
+      "round": 15,
+      "rows": 759,
+      "sha256": "dcef2b23ac3ed2722e1f378f74c208c45ca8e1ce24d8201f13337b490942bcac",
+      "hasXp": false
+    },
+    {
+      "season": "2025-26",
+      "round": 16,
+      "rows": 760,
+      "sha256": "978a388daa4464ede81c4c83abb5d10c3292a00a1bf67e17fe201c521379ef75",
+      "hasXp": false
+    },
+    {
+      "season": "2025-26",
+      "round": 17,
+      "rows": 770,
+      "sha256": "cec3b231e4ab8db77129ecbd46b78913b9c79ee340cc0579b7f281626ae27e27",
+      "hasXp": false
+    },
+    {
+      "season": "2025-26",
+      "round": 18,
+      "rows": 775,
+      "sha256": "e68401d05ff2df78245996cf4bab9737cdf3f62b9a2da87b1ef892477194b376",
+      "hasXp": false
+    },
+    {
+      "season": "2025-26",
+      "round": 19,
+      "rows": 780,
+      "sha256": "8a70fa2504a83e1198515171ced85ccba1c5218e5325f6df21df76632f6a55b7",
+      "hasXp": false
+    },
+    {
+      "season": "2025-26",
+      "round": 20,
+      "rows": 790,
+      "sha256": "64747696609076e10773d9cd98e1d24b7ff28486ab06e36c3271b014044fe30f",
+      "hasXp": false
+    },
+    {
+      "season": "2025-26",
+      "round": 21,
+      "rows": 795,
+      "sha256": "abf22e590571587ffa9c7b54451f272fcf295136e5834337695a2b69a0f05cd4",
+      "hasXp": false
+    },
+    {
+      "season": "2025-26",
+      "round": 22,
+      "rows": 799,
+      "sha256": "f89c258cf5b511e1b01ffb497613044eba10c576b185ca4e5fac4ca2a493bd5c",
+      "hasXp": false
+    },
+    {
+      "season": "2025-26",
+      "round": 23,
+      "rows": 803,
+      "sha256": "231e6396a15ccb57b7daff12eed73d3ec4ef99c5eeb1eb66f9b789246af37ca6",
+      "hasXp": false
+    },
+    {
+      "season": "2025-26",
+      "round": 24,
+      "rows": 811,
+      "sha256": "fb8560e682736961becdf323c52756ed51656d33512501c2d83db1853b01d75d",
+      "hasXp": true
+    },
+    {
+      "season": "2025-26",
+      "round": 25,
+      "rows": 817,
+      "sha256": "e445b0ee9d085359e34c81e28fe749b128c8d82a556accc55f69c9990330036d",
+      "hasXp": false
+    },
+    {
+      "season": "2025-26",
+      "round": 26,
+      "rows": 896,
+      "sha256": "f44f5c6ac7edd2409eb2159d452cf468173bb62d8b38af0a54adbd20f7ea7081",
+      "hasXp": false
+    },
+    {
+      "season": "2025-26",
+      "round": 27,
+      "rows": 818,
+      "sha256": "fc1aae31fcc05422dc89978d5f9d07546e9fefd3c3f9463de4c5c51f54e43265",
+      "hasXp": false
+    },
+    {
+      "season": "2025-26",
+      "round": 28,
+      "rows": 819,
+      "sha256": "5ad6838a3c6ebabf0b5e6029e89516bafa0aeb9f5d55af19a14a1a8119667c82",
+      "hasXp": false
+    },
+    {
+      "season": "2025-26",
+      "round": 29,
+      "rows": 820,
+      "sha256": "86bb5423e88701c2edf53f06eaf303f91138918c63acebabcd86afe6a10c5f25",
+      "hasXp": true
+    },
+    {
+      "season": "2025-26",
+      "round": 30,
+      "rows": 822,
+      "sha256": "f544dca1c890c7841eb1e254a22551aa346e171bf94cc4bb66cf852d1a1a8305",
+      "hasXp": false
+    },
+    {
+      "season": "2025-26",
+      "round": 31,
+      "rows": 664,
+      "sha256": "334d242fcf5e4fa7fbda689fb1e4c8f4cf7a99758ea290a927cd0424e3674b6a",
+      "hasXp": false
+    },
+    {
+      "season": "2025-26",
+      "round": 32,
+      "rows": 826,
+      "sha256": "005121b1925ef56d4d0897028e62e493edf7fd0c95f1dc48b6d11d5caf5444f9",
+      "hasXp": false
+    },
+    {
+      "season": "2025-26",
+      "round": 33,
+      "rows": 1077,
+      "sha256": "2ae58852e32fb0d08609d9d1fef790730b69b7c6f3198d74d4fc863c568c2511",
+      "hasXp": false
+    },
+    {
+      "season": "2025-26",
+      "round": 34,
+      "rows": 582,
+      "sha256": "d1e8037307a9ba21cee0bf815de2a070d26990706ae5291f15747421f0b3d155",
+      "hasXp": false
+    },
+    {
+      "season": "2025-26",
+      "round": 35,
+      "rows": 832,
+      "sha256": "2626503d17e1d6bc3f1c36f11feb8f015b86bb2f0808e17f90e861cba5d9478c",
+      "hasXp": false
+    },
+    {
+      "season": "2025-26",
+      "round": 36,
+      "rows": 920,
+      "sha256": "19957f761b90bf321111e5d4addfad8a8ec58eefdf4dcd307aa19fb94afc7ebf",
+      "hasXp": false
+    },
+    {
+      "season": "2025-26",
+      "round": 37,
+      "rows": 840,
+      "sha256": "018de5b2d629f2939cac33e50cc37a5bb8b7edc1231f70a44ec9ab6c79e29953",
+      "hasXp": false
+    },
+    {
+      "season": "2025-26",
+      "round": 38,
+      "rows": 841,
+      "sha256": "ee75495d229e2e9fc01d4ab1e14bfe4bced9931b48ab055f9e3eb246a470dce8",
+      "hasXp": true
+    }
+  ]
+}

@@ -2,7 +2,7 @@
 // and every rival across N upcoming GWs. Used by the Plan tab + the
 // cumulative overtake odds (probability of leaping the table gap after N GWs).
 //
-// We re-use `projectSquad(squad, fixtures, gw, bs)` per GW, fetching that
+// We re-use `projectSquad(squad, fixtures, gw)` per GW, fetching that
 // gameweek's fixtures separately so blanks/doubles are handled correctly.
 // The user's transfer state isn't simulated here — we project the *current*
 // squad forward. A future transfer-aware horizon is left for later.
@@ -50,8 +50,8 @@ export async function buildHorizon(
   const horizon: HorizonGw[] = await Promise.all(
     gws.map(async (gw) => {
       const fixtures = await getFixtures(gw);
-      const user = projectSquad(ctx.user, fixtures, gw, bs);
-      const rivals = ctx.rivals.map((r) => projectSquad(r, fixtures, gw, bs));
+      const user = projectSquad(ctx.user, fixtures, gw);
+      const rivals = ctx.rivals.map((r) => projectSquad(r, fixtures, gw));
       const overtake = computeOvertakeOdds(ctx, user, rivals);
       return { gw, fixtures, user, rivals, overtake };
     }),
