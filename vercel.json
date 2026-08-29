@@ -3,7 +3,6 @@
   "framework": "nextjs",
   "crons": [
     { "path": "/api/cron/news-watch", "schedule": "30 12 * * *" },
-    { "path": "/api/cron/deadline-watch", "schedule": "0 12 * * *" },
-    { "path": "/api/cron/snapshot", "schedule": "0 6,22 * * *" }
+    { "path": "/api/cron/deadline-watch", "schedule": "0 12 * * *" }
   ]
 }
