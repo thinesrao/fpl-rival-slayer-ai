@@ -12,7 +12,7 @@ function features(overrides: Partial<PlayerFeatures> = {}): PlayerFeatures {
     xa90: 0.2,
     bps90: 20,
     dcPer90: 4,
-    startRate: 1,
+    pStart: 1,
     minutesPerStart: 90,
     availability: 1,
     fdr: 3,
@@ -26,8 +26,8 @@ function features(overrides: Partial<PlayerFeatures> = {}): PlayerFeatures {
 
 describe("regression: minutes probability is applied exactly once", () => {
   it("halving play probability halves expected points, rather than quartering them", () => {
-    const full = scorePlayer(features({ availability: 1, startRate: 1 })).xPoints;
-    const half = scorePlayer(features({ availability: 0.5, startRate: 1 })).xPoints;
+    const full = scorePlayer(features({ availability: 1, pStart: 1 })).xPoints;
+    const half = scorePlayer(features({ availability: 0.5, pStart: 1 })).xPoints;
     expect(half / full).toBeCloseTo(0.5, 2);
   });
 
@@ -39,7 +39,7 @@ describe("regression: minutes probability is applied exactly once", () => {
   });
 
   it("exposes playProbability as the single applied factor", () => {
-    expect(scorePlayer(features({ availability: 0.5, startRate: 1 })).playProbability).toBeCloseTo(0.5, 5);
+    expect(scorePlayer(features({ availability: 0.5, pStart: 1 })).playProbability).toBeCloseTo(0.5, 5);
   });
 });
 
@@ -116,7 +116,7 @@ describe("scorePlayer general behaviour", () => {
   });
 
   it("is never NaN for any zeroed input", () => {
-    const z = scorePlayer(features({ xg90: 0, xa90: 0, bps90: 0, dcPer90: 0, startRate: 0, minutesPerStart: 0, opponentXgcPer90: 0 }));
+    const z = scorePlayer(features({ xg90: 0, xa90: 0, bps90: 0, dcPer90: 0, pStart: 0, minutesPerStart: 0, opponentXgcPer90: 0 }));
     expect(Number.isNaN(z.xPoints)).toBe(false);
   });
 

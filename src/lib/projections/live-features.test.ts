@@ -88,6 +88,42 @@ describe("liveFeatures", () => {
       gw: 10,
     });
     expect(Number.isNaN(f.xg90)).toBe(false);
-    expect(Number.isNaN(f.startRate)).toBe(false);
+    expect(Number.isNaN(f.pStart)).toBe(false);
+  });
+});
+
+describe("regression: the live path has no hard-zero either", () => {
+  it("does not score a fit player with no recorded starts at exactly zero", () => {
+    const f = liveFeatures({
+      player: element({ starts_per_90: 0 }),
+      team,
+      position: "MID",
+      fixtures: [fixture()],
+      gw: 10,
+    });
+    expect(f.pStart).toBeGreaterThan(0);
+    expect(f.minutesPerStart).toBeGreaterThan(0);
+  });
+
+  it("still floors a player FPL has flagged as out", () => {
+    const f = liveFeatures({
+      player: element({ starts_per_90: 0, status: "i", chance_of_playing_next_round: 0 }),
+      team,
+      position: "MID",
+      fixtures: [fixture()],
+      gw: 10,
+    });
+    expect(f.pStart).toBe(0);
+  });
+
+  it("leaves a regular starter's probability untouched", () => {
+    const f = liveFeatures({
+      player: element({ starts_per_90: 1 }),
+      team,
+      position: "MID",
+      fixtures: [fixture()],
+      gw: 10,
+    });
+    expect(f.pStart).toBe(1);
   });
 });

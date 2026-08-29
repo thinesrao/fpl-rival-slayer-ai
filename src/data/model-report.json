@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-28T19:38:55.597Z",
+  "generatedAt": "2026-08-29T08:23:20.341Z",
   "season": "2025-26",
   "rounds": [
     4,
@@ -13,9 +13,9 @@
   ],
   "starters": {
     "model": {
-      "rmse": 3.402001552078889,
-      "mae": 2.5519771795313644,
-      "spearman": 0.1580676262356758,
+      "rmse": 3.3300014397323614,
+      "mae": 2.3387729976980207,
+      "spearman": 0.1546573132706379,
       "n": 1733
     },
     "fplXp": {
@@ -32,54 +32,54 @@
   },
   "calibration": [
     {
-      "meanPredicted": 0.30154674726206415,
-      "meanActual": 3.1196581196581197,
-      "n": 234
+      "meanPredicted": 0.48044269924940547,
+      "meanActual": 3.1343283582089554,
+      "n": 201
     },
     {
-      "meanPredicted": 1.5058652916333017,
-      "meanActual": 3.0144927536231885,
-      "n": 207
+      "meanPredicted": 1.2875476852213583,
+      "meanActual": 3.0541871921182264,
+      "n": 203
     },
     {
-      "meanPredicted": 2.536080730478857,
-      "meanActual": 3.1724137931034484,
-      "n": 232
+      "meanPredicted": 2.037893841905914,
+      "meanActual": 2.965217391304348,
+      "n": 230
     },
     {
-      "meanPredicted": 3.5925439401324386,
-      "meanActual": 3.4579945799457996,
-      "n": 369
+      "meanPredicted": 2.8148421060506275,
+      "meanActual": 3.454054054054054,
+      "n": 370
     },
     {
-      "meanPredicted": 4.530434959837507,
-      "meanActual": 3.5767326732673266,
-      "n": 404
+      "meanPredicted": 3.510284359168954,
+      "meanActual": 3.675603217158177,
+      "n": 373
     },
     {
-      "meanPredicted": 5.5088076530058645,
-      "meanActual": 4.514018691588785,
-      "n": 214
+      "meanPredicted": 4.231277503591341,
+      "meanActual": 4.091633466135458,
+      "n": 251
     },
     {
-      "meanPredicted": 6.414766559307881,
-      "meanActual": 4.7924528301886795,
-      "n": 53
+      "meanPredicted": 4.92927436116054,
+      "meanActual": 4.925,
+      "n": 80
     },
     {
-      "meanPredicted": 7.4703008135322255,
-      "meanActual": 4.153846153846154,
-      "n": 13
+      "meanPredicted": 5.7244492365582005,
+      "meanActual": 4.933333333333334,
+      "n": 15
     },
     {
-      "meanPredicted": 8.482136252803551,
-      "meanActual": 5.666666666666667,
+      "meanPredicted": 6.4972041711041255,
+      "meanActual": 5.571428571428571,
+      "n": 7
+    },
+    {
+      "meanPredicted": 7.51879093905178,
+      "meanActual": 9,
       "n": 3
-    },
-    {
-      "meanPredicted": 9.416140810071312,
-      "meanActual": 10,
-      "n": 4
     }
   ]
 }

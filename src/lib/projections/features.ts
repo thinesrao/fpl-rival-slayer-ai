@@ -18,6 +18,44 @@ export const MIN_HISTORY_ROUNDS = 3;
 /** Default rolling window, in rounds. Tuned in Task 9. */
 export const DEFAULT_WINDOW = 6;
 
+/**
+ * Base rate at which a scored player starts, measured across the 2025-26 fit
+ * set (rounds 7-37 excluding the benchmark holdout): 0.279 of scored rows.
+ * Used as the prior that `pStart` shrinks toward.
+ */
+export const BASE_START_RATE = 0.28;
+
+/**
+ * Weight of the prior, in pseudo-observations. Two is a deliberately weak
+ * prior: it moves a 6-round sample noticeably but is swamped by a full season.
+ */
+export const START_PRIOR_WEIGHT = 2;
+
+/**
+ * Expected minutes for a player who has not started inside the window, so we
+ * have no measurement of how long they last when they do start.
+ */
+export const FALLBACK_MINUTES_PER_START = 70;
+
+/**
+ * Posterior mean of a Beta-Binomial: the observed start count shrunk toward the
+ * league base rate by `START_PRIOR_WEIGHT` pseudo-observations.
+ *
+ * Why this exists: the raw fraction returns exactly 0 for a player who started
+ * none of the last six rounds, and `scorePlayer` multiplies the entire score by
+ * it — so 5% of players who went on to start were being projected at exactly
+ * 0.00 while actually averaging 3.36 points. Asserting a probability of zero
+ * from six observations is overconfident; a finite sample cannot rule anything
+ * out. Shrinking toward the base rate removes the false certainty without
+ * erasing genuine rotation signal.
+ */
+export function smoothStartProbability(starts: number, rounds: number): number {
+  if (rounds <= 0) return BASE_START_RATE;
+  const smoothed =
+    (starts + START_PRIOR_WEIGHT * BASE_START_RATE) / (rounds + START_PRIOR_WEIGHT);
+  return Math.max(0, Math.min(1, smoothed));
+}
+
 export class LeakageError extends Error {
   constructor(message: string) {
     super(message);
@@ -47,9 +85,16 @@ export interface PlayerFeatures {
   bps90: number;
   /** Rolling defensive-contribution count per 90. */
   dcPer90: number;
-  /** Fraction of prior rounds in which the player started. */
-  startRate: number;
-  /** Mean minutes in rounds the player started. */
+  /**
+   * Estimated probability the player starts, shrunk toward the league base
+   * rate. NOT the raw observed fraction — see smoothStartProbability. Never
+   * exactly 0 for a finite sample.
+   */
+  pStart: number;
+  /**
+   * Mean minutes in rounds the player started, or FALLBACK_MINUTES_PER_START
+   * when they started none of the window and we have no measurement.
+   */
   minutesPerStart: number;
   /** 0..1 chance of being available. 1 when unknown. */
   availability: number;
@@ -111,8 +156,9 @@ export function buildFeatures(
     xa90: per90(recent.reduce((s, r) => s + r.expectedAssists, 0), minutes),
     bps90: per90(recent.reduce((s, r) => s + r.bps, 0), minutes),
     dcPer90: per90(recent.reduce((s, r) => s + r.defensiveContribution, 0), minutes),
-    startRate: recent.length === 0 ? 0 : started.length / recent.length,
-    minutesPerStart: started.length === 0 ? 0 : startedMinutes / started.length,
+    pStart: smoothStartProbability(started.length, recent.length),
+    minutesPerStart:
+      started.length === 0 ? FALLBACK_MINUTES_PER_START : startedMinutes / started.length,
     availability: opts.availability === undefined ? 1 : clampUnit(opts.availability),
     fdr: fixture.fdr,
     isHome: fixture.isHome,

@@ -98,7 +98,7 @@ export function scorePlayer(f: PlayerFeatures): ScoredPlayer {
   }
 
   // Applied exactly once, at the end. Never folded into the per-term scaling.
-  const playProbability = Math.max(0, Math.min(1, f.availability * f.startRate));
+  const playProbability = Math.max(0, Math.min(1, f.availability * f.pStart));
   const expectedMinutes = Math.max(0, Math.min(90, f.minutesPerStart));
   const minutesShare = expectedMinutes / 90;
 

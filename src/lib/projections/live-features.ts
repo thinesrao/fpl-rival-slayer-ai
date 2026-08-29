@@ -11,12 +11,15 @@
 //   per-90 values for both, so the bonus and defensive-contribution score
 //   components do not discriminate between same-position players live, while
 //   they do in the backtest.
-// - minutesPerStart: hardcoded to `startRate > 0 ? 90 : 0` below, versus the
+// - minutesPerStart: hardcoded to 90 for anyone with recorded starts (and the
+//   shared fallback otherwise) below, versus the
 //   backtest's mean started minutes per player. Every live starter is treated
 //   as a full 90-minute appearance (appearance points = 2, unconditional
 //   clean-sheet eligibility), regardless of how long they actually tend to
 //   play once started.
-// - startRate: FPL's `starts_per_90` (starts per 90 minutes *played*), clamped
+// - pStart: FPL's `starts_per_90` (starts per 90 minutes *played*), floored at
+//   the league base rate rather than Beta-smoothed since bootstrap exposes no
+//   round count, clamped
 //   to 1, versus the backtest's fraction of rounds actually started. A player
 //   who is subbed off at half-time every week plays at "2 starts per 90
 //   minutes played" and clamps to 1.0 here, reading as a guaranteed starter.
@@ -31,7 +34,12 @@
 // read as characterising live ranking quality.
 
 import type { FplElement, FplFixture, FplTeam, Position } from "@/lib/types";
-import type { FixtureContext, PlayerFeatures } from "@/lib/projections/features";
+import {
+  BASE_START_RATE,
+  FALLBACK_MINUTES_PER_START,
+  type FixtureContext,
+  type PlayerFeatures,
+} from "@/lib/projections/features";
 
 /** Median BPS per 90 by position, used when a player has no usable history. */
 const DEFAULT_BPS90: Record<Position, number> = { GKP: 18, DEF: 16, MID: 14, FWD: 14 };
@@ -39,6 +47,15 @@ const DEFAULT_BPS90: Record<Position, number> = { GKP: 18, DEF: 16, MID: 14, FWD
 const DEFAULT_DC90: Record<Position, number> = { GKP: 0, DEF: 6, MID: 5, FWD: 2 };
 /** League-average expected goals conceded per 90, used when unknown. */
 const LEAGUE_XGC90 = 1.35;
+
+/**
+ * 0 when FPL has flagged the player as definitively out, 1 otherwise. Keeps the
+ * base-rate floor from resurrecting a player who is injured or suspended.
+ */
+function chanceFloor(player: FplElement): number {
+  if (player.status && player.status !== "a" && player.status !== "d") return 0;
+  return player.chance_of_playing_next_round === 0 ? 0 : 1;
+}
 
 function num(value: unknown, fallback = 0): number {
   const n = typeof value === "number" ? value : Number(value);
@@ -81,7 +98,12 @@ export function liveFeatures(args: {
   const { player, team, position, fixtures, gw } = args;
   const chance = player.chance_of_playing_next_round;
   const availability = chance === null || chance === undefined ? 1 : Math.max(0, Math.min(1, chance / 100));
-  const startRate = Math.max(0, Math.min(1, num(player.starts_per_90, 1)));
+  // Bootstrap gives no round count, so the Beta smoothing the backtest applies
+  // is not available here. A floor at the league base rate serves the same
+  // purpose: a player with no recorded starts is unlikely, not impossible, and
+  // must not be multiplied to exactly zero.
+  const observedStartRate = Math.max(0, Math.min(1, num(player.starts_per_90, 1)));
+  const pStart = Math.max(BASE_START_RATE * chanceFloor(player), observedStartRate);
 
   return {
     playerId: player.id,
@@ -91,8 +113,8 @@ export function liveFeatures(args: {
     xa90: num(player.expected_assists_per_90),
     bps90: DEFAULT_BPS90[position],
     dcPer90: DEFAULT_DC90[position],
-    startRate,
-    minutesPerStart: startRate > 0 ? 90 : 0,
+    pStart,
+    minutesPerStart: observedStartRate > 0 ? 90 : FALLBACK_MINUTES_PER_START,
     availability,
     ...fixtureContextFor(fixtures, team.id, gw),
     sampleRounds: 0,
