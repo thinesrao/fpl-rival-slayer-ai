@@ -15,14 +15,22 @@
 // interval that the decision rule tests against zero.
 //
 // Each draw consumes exactly one shared normal deviate for the user (scaled
-// separately for baseline and variant) and one shared normal deviate for
-// "the rival environment this week" (scaled per rival's own mean/stdev).
-// Drawing the rival deviate once per draw — not once per rival — keeps
-// stream consumption independent of how many rivals are being evaluated, so
-// summing the delta across an arbitrary set of rivals is exact rather than
-// merely close.
+// separately for baseline and variant) and, per rival, one deviate from that
+// rival's OWN stream (shared between baseline and variant, but independent
+// of every other rival's distribution). Each rival gets its own stream,
+// keyed by batch seed plus the rival's own (expected, stdev, pointsBehind) —
+// not by its position in the array or its identity — rather than sharing
+// one stream sequentially. That keeps each stream's consumption rate
+// constant regardless of how many rivals are being evaluated (so summing
+// the delta across an arbitrary set of rivals is exact, not merely close),
+// and keeps rivals with genuinely different distributions independent of
+// one another (no artificial lockstep — one rival having a good week
+// doesn't imply another one does). Two rivals that happen to share the same
+// distribution draw the same stream, which is the only way for their
+// contributions to a summed delta to agree exactly rather than merely in
+// expectation.
 
-import { mulberry32, normalSampler } from "@/lib/decision/rng";
+import { hashSeed, mulberry32, normalSampler } from "@/lib/decision/rng";
 import type { SquadProjection } from "@/lib/types";
 
 export const BATCHES = 40;
@@ -66,26 +74,29 @@ export function simulateDelta(args: {
 
   for (let b = 0; b < BATCHES; b++) {
     // Each batch gets its own streams, derived from the run seed so the
-    // whole distribution is reproducible. The user and rival dimensions use
-    // separate streams so that neither's consumption rate depends on the
-    // other.
-    const userSample = normalSampler(mulberry32((seed + b * 0x9e3779b9) >>> 0));
-    const rivalSample = normalSampler(mulberry32((seed + b * 0x9e3779b9 + 1) >>> 0));
+    // whole distribution is reproducible. The user stream and each rival's
+    // stream are independent of one another, and each rival's stream is
+    // keyed by that rival's own distribution — not by its position in the
+    // array — so consumption is constant regardless of how many rivals are
+    // present.
+    const batchSeed = (seed + b * 0x9e3779b9) >>> 0;
+    const sampleUser = normalSampler(mulberry32(batchSeed));
+    const sampleRival = rivals.map((r) =>
+      normalSampler(mulberry32(hashSeed(batchSeed, "rival", r.expected, r.stdev, r.pointsBehind))),
+    );
     let batchDelta = 0;
 
     for (let d = 0; d < DRAWS_PER_BATCH; d++) {
       // One shared standard-normal draw per squad, reused across scenarios.
-      const zUser = userSample(0, 1);
+      const zUser = sampleUser(0, 1);
       const baseScore = baseline.startingXIPoints + Math.max(1, baseline.stdev) * zUser;
       const varScore = variant.startingXIPoints + Math.max(1, variant.stdev) * zUser;
 
-      // One shared standard-normal draw for the rival environment this week,
-      // reused across every rival being evaluated — see header note.
-      const zRival = rivalSample(0, 1);
-
       for (let i = 0; i < rivals.length; i++) {
         const rival = rivals[i];
-        const rivalScore = rival.expected + Math.max(1, rival.stdev) * zRival;
+        // One shared draw from this rival's own stream, reused across
+        // scenarios — the pairing that makes the delta low-variance.
+        const rivalScore = sampleRival[i](rival.expected, Math.max(1, rival.stdev));
         const need = rival.pointsBehind;
         const before = baseScore - rivalScore > need ? 1 : 0;
         const after = varScore - rivalScore > need ? 1 : 0;
