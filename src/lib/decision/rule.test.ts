@@ -79,4 +79,14 @@ describe("pickVerdict", () => {
     expect(out.verdict.kind).toBe("roll");
     expect(out.alternatives[0].headline).toBe("Near miss");
   });
+
+  it("prefers a smaller confident edge over a larger uncertain one", () => {
+    const straddle = action({ headline: "Big but noisy", mean: 0.09, lower80: -0.01, upper80: 0.19 });
+    const modest = action({ headline: "Small but sure", mean: 0.03, lower80: 0.01, upper80: 0.05 });
+    const out = pickVerdict(roll, [straddle, modest]);
+    expect(out.verdict.headline).toBe("Small but sure");
+    expect(out.gateStatus).toBe("recommend");
+    // The larger mean still ranks first among alternatives — it lost on confidence.
+    expect(out.alternatives[0].headline).toBe("Big but noisy");
+  });
 });

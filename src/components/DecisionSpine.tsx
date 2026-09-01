@@ -51,7 +51,7 @@ export function DecisionSpine({
 }: {
   teamId: number;
   leagueId: number;
-  onNavigate: (tab: Evidence["tab"], params?: Record<string, string>) => void;
+  onNavigate: (tab: Evidence["tab"]) => void;
 }) {
   const [showAlternatives, setShowAlternatives] = useState(false);
   const { data, isLoading, isError } = useQuery({
@@ -104,7 +104,7 @@ export function DecisionSpine({
               <button
                 key={`${e.tab}:${e.label}`}
                 type="button"
-                onClick={() => onNavigate(e.tab, e.params)}
+                onClick={() => onNavigate(e.tab)}
                 className="rounded-full border px-3 py-1 text-xs hover:bg-accent"
               >
                 {e.label} →

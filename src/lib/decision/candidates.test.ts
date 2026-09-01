@@ -60,6 +60,7 @@ const option = (over: Partial<TransferOption> = {}): TransferOption =>
     inCost: 55,
     inXp: 9,
     netGainXi: 3,
+    variantStdev: 12,
     postBank: 5,
     overtakeImpact: [],
     overtakeSum: 0.04,
@@ -147,5 +148,13 @@ describe("transferCandidates", () => {
 
   it("returns nothing for an empty option list", () => {
     expect(transferCandidates([], projection(), 1)).toEqual([]);
+  });
+
+  it("widens the spread when the incoming player is more volatile", () => {
+    const base = projection();
+    const volatile = option({ variantStdev: base.stdev + 8 });
+    const [c] = transferCandidates([volatile], base, 1);
+    expect(c.variant.stdev).toBeGreaterThan(base.stdev);
+    expect(c.variant.stdev).toBe(volatile.variantStdev);
   });
 });

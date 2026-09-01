@@ -14,7 +14,6 @@ export interface Evidence {
   label: string;
   /** Must stay in sync with TabId in src/components/BottomNav.tsx. */
   tab: "squad" | "vs" | "coach" | "matches" | "collection";
-  params?: Record<string, string>;
 }
 
 export interface Action {

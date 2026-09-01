@@ -130,7 +130,11 @@ against each other. The comparison uses paired Monte-Carlo draws: both
 scenarios are evaluated against the same random numbers, so what survives the
 subtraction is the effect of the change rather than sampling noise.
 
-An action is recommended **only when its 80% credible interval excludes zero**.
+An action is recommended **only when its 80% batch-spread interval excludes
+zero**. That interval is the 10th/90th percentile spread across forty batch
+means, not a credible interval on the true delta — it is a deliberately
+conservative noise floor and carries no parameter uncertainty from the
+projections themselves.
 Most weeks nothing clears that bar, and the app says so. That is deliberate:
 the model behind these numbers does not yet beat FPL's own expected points
 (see Limitations), so manufacturing a weekly pick would be dishonest.

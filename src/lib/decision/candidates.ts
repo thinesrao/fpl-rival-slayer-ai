@@ -13,6 +13,16 @@ export const CAPTAIN_ALTERNATIVES = 3;
 /** Points deducted for a transfer beyond the free allowance. */
 const HIT_COST = -4;
 
+// Chips (`squad.activeChip`) are not read anywhere in this file. The armband
+// below is hardcoded at x2 and transferCandidates always charges a hit when
+// freeTransfers is exhausted, but under Triple Captain the true point delta
+// is 2 * (alt - cur) and the variance delta is 8 * dVar, and under Wildcard
+// or Free Hit there is no hit to charge. Every one of those errors currently
+// understates a candidate's value or overstates its cost — never the other
+// way — so nothing here is overclaimed, but that is luck, not design.
+// Anyone adding chip support must preserve that conservative direction: it
+// is safer to undersell a chip week than to oversell one.
+
 export interface Candidate {
   kind: "transfer" | "captain";
   headline: string;
@@ -79,9 +89,10 @@ export function transferCandidates(
       headline: `Bring in ${option.inWebName}`,
       detail: `Sell ${option.outWebName} (${option.outTeamShort}) for ${option.inWebName} (${option.inTeamShort}).`,
       hitCost,
-      // stdev is left unchanged because TransferOption carries no variance for the
-      // incoming player — we cannot recompute the spread without that data.
-      variant: shifted(projection, option.netGainXi + hitCost),
+      // variantStdev is the post-swap squad's own stdev, already computed by
+      // simulateSwap when the option was generated — a transfer to a more
+      // volatile player widens the spread, same as a captain change does.
+      variant: shifted(projection, option.netGainXi + hitCost, option.variantStdev),
       evidence: [
         { label: `${option.outWebName} → ${option.inWebName}`, tab: "squad" },
         { label: "Effect on your rivals", tab: "vs" },

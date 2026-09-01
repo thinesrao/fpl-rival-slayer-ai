@@ -46,8 +46,12 @@ just built.
 So the spine recommends an action **only when the action's edge survives the
 model's own uncertainty**. Concretely:
 
-> Recommend an action only when the 80% credible interval on its overtake-
+> Recommend an action only when the 80% batch-spread interval on its overtake-
 > probability delta, versus doing nothing, excludes zero.
+
+That interval — the 10th/90th percentile spread across forty batch means — is
+a deliberately conservative noise floor, not a credible interval on the true
+delta: it carries no parameter uncertainty from the projections themselves.
 
 When no action clears that bar the verdict is "roll it" — stated as a
 positive finding, not an absence. This is the correct answer in most real FPL
@@ -79,7 +83,7 @@ processes so two devices agree.
 The simulator draws independent samples per scenario. Comparing a squad before
 and after a one-player transfer that way estimates a small difference as the
 difference of two independently noisy quantities — the sampling noise is far
-larger than the effect being measured, and the credible interval in the
+larger than the effect being measured, and the batch-spread interval in the
 decision rule would almost never exclude zero for the wrong reason.
 
 Every scenario in a comparison must therefore be evaluated on **the same

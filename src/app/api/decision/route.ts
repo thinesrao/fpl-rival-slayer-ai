@@ -45,7 +45,10 @@ export async function GET(req: NextRequest) {
     ]);
 
     const bank = entry?.last_deadline_bank ?? 0;
-    const freeTransfers = entryHistory ? computeFreeTransfers(entryHistory).freeTransfers : 1;
+    // Assume no free transfer when we cannot read the history. Charging a hit we
+    // might not owe suppresses a recommendation; skipping one we do owe invents a
+    // 4-point edge, so the safe direction is to assume the cost.
+    const freeTransfers = entryHistory ? computeFreeTransfers(entryHistory).freeTransfers : 0;
 
     const transferOptions = generateTransferOptions({
       ctx: context,

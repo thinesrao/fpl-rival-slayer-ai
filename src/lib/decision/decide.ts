@@ -43,6 +43,16 @@ export function decide(args: DecideArgs): Decision {
   const deadlineInfo = { gw: deadline.gw, iso: deadline.iso, hoursRemaining };
   const roll = rollAction();
 
+  if (!Number.isFinite(hoursRemaining)) {
+    return {
+      verdict: roll,
+      alternatives: [],
+      deadline: deadlineInfo,
+      gateStatus: "unavailable",
+      note: "Could not read the deadline for this gameweek.",
+    };
+  }
+
   if (hoursRemaining <= 0) {
     return {
       verdict: roll,
@@ -92,19 +102,20 @@ export function decide(args: DecideArgs): Decision {
 
   const seed = hashSeed("decision", deadline.gw, squad.entry.id);
 
-  const actions: Action[] = candidates.map((c, i) => ({
+  const actions: Action[] = candidates.map((c) => ({
     kind: c.kind,
     headline: c.headline,
     detail: c.detail,
     hitCost: c.hitCost,
     evidence: c.evidence,
-    // Each candidate gets its own stream, but one derived from the shared run
-    // seed, so the whole decision is reproducible.
+    // Every candidate is simulated against the SAME draws, so the ranking between
+    // them is a like-for-like comparison rather than a difference of independently
+    // noisy estimates — the same reason simulateDelta pairs baseline against variant.
     overtakeDelta: simulateDelta({
       baseline: userProjection,
       variant: c.variant,
       rivals: targets,
-      seed: hashSeed(seed, i),
+      seed,
     }),
   }));
 

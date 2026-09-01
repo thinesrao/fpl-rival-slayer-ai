@@ -48,7 +48,7 @@ const bigOption = (): TransferOption =>
     id: "OPT-01", category: "best-xp",
     outPlayerId: 11, outWebName: "Alt", outTeamShort: "AAA", outCost: 50, outXp: 4, outPosition: "MID",
     inPlayerId: 20, inWebName: "Newman", inTeamShort: "BBB", inCost: 55, inXp: 30,
-    netGainXi: 26, postBank: 5, overtakeImpact: [], overtakeSum: 0.4, notes: [],
+    netGainXi: 26, variantStdev: 12, postBank: 5, overtakeImpact: [], overtakeSum: 0.4, notes: [],
   }) as TransferOption;
 
 const base = {
@@ -92,6 +92,17 @@ describe("decide", () => {
     const d = decide({ ...base, now: Date.parse("2026-09-05T00:00:00Z"), transferOptions: [bigOption()] });
     expect(d.gateStatus).toBe("locked");
     expect(d.note).toBeTruthy();
+  });
+
+  it("reports unavailable when the deadline cannot be parsed", () => {
+    const d = decide({
+      ...base,
+      deadline: { gw: 3, iso: "not-a-real-timestamp" },
+      transferOptions: [bigOption()],
+    });
+    expect(d.gateStatus).toBe("unavailable");
+    expect(d.note).toContain("deadline");
+    expect(d.deadline.hoursRemaining).toBeNaN();
   });
 
   it("reports unavailable when the model lacks history", () => {

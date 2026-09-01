@@ -45,6 +45,8 @@ export interface TransferOption {
   inCost: number;
   inXp: number;
   netGainXi: number; // change in starting-XI total (incl. captain mult if relevant)
+  /** Post-swap squad stdev, from the same what-if projection netGainXi is drawn from. */
+  variantStdev: number;
   postBank: number; // tenths of £m remaining after this swap
   overtakeImpact: Array<{
     rivalEntryId: number;
@@ -223,6 +225,7 @@ export function generateTransferOptions(args: GenerateArgs): TransferOption[] {
       inCost: s.pair.inEl.now_cost,
       inXp: Number((inProj?.xPoints ?? 0).toFixed(1)),
       netGainXi: Number(s.result.xPDeltaXi.toFixed(1)),
+      variantStdev: s.result.newSquadProjection?.stdev ?? userProjection.stdev,
       postBank: s.result.budgetAfter,
       overtakeImpact: s.impact,
       overtakeSum: Number(s.overtakeSum.toFixed(3)),
