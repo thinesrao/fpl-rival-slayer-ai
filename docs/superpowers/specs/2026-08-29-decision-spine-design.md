@@ -150,17 +150,19 @@ interface Decision {
   verdict: Action;            // may be the roll action
   alternatives: Action[];     // ranked, for "what else did you consider"
   deadline: { gw: number; iso: string; hoursRemaining: number };
-  gateStatus: "recommend" | "too-close" | "locked";
+  gateStatus: "recommend" | "too-close" | "locked" | "unavailable";
+  note?: string;               // human-readable reason, set when gateStatus isn't "recommend"
 }
 
 interface Action {
   kind: "roll" | "transfer" | "captain";
   headline: string;           // "Roll your transfer" / "Bring in Semenyo"
+  detail: string;
   overtakeDelta: {
     mean: number;
     lower80: number;
     upper80: number;
-    perRival: Array<{ rivalName: string; before: number; after: number }>;
+    perRival: Array<{ rivalEntryId: number; rivalName: string; before: number; after: number }>;
   };
   hitCost: number;            // 0 or -4, -8 …
   evidence: Evidence[];
@@ -168,15 +170,18 @@ interface Action {
 
 interface Evidence {
   label: string;              // "Szoboszlai vs Semenyo"
-  tab: "squad" | "rival" | "ai" | "matches" | "draft";
-  params?: Record<string, string>;
+  tab: "squad" | "vs" | "coach" | "matches" | "collection";
 }
 ```
 
 `gateStatus: "locked"` covers the post-deadline case: the decision is made, so
 the spine states what was locked in rather than pretending a choice remains.
-Richer gameweek-phase behaviour belongs to sub-project C; B only needs to not
-lie once the deadline passes.
+`gateStatus: "unavailable"` covers the too-little-history case (and any other
+input the engine cannot compute a verdict from, such as an unparseable
+deadline) — it is the state live right now, this early in the season, which
+is why there are four states rather than three. Richer gameweek-phase
+behaviour belongs to sub-project C; B only needs to not lie once the deadline
+passes.
 
 ## UI
 
