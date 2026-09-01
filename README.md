@@ -119,6 +119,30 @@ curl -s https://<deployment>/api/diag | jq
 and whether the body is JSON or a Cloudflare challenge, plus booleans for which env
 vars are set (never their values). Start here when FPL data stops loading.
 
+## The decision spine
+
+The dashboard opens with one verdict: the single change most worth making this
+week, or an explicit "roll it" when nothing is worth making.
+
+Actions are compared on one scale — the change in probability of finishing
+above each tracked rival — so a captain switch and a transfer can be ranked
+against each other. The comparison uses paired Monte-Carlo draws: both
+scenarios are evaluated against the same random numbers, so what survives the
+subtraction is the effect of the change rather than sampling noise.
+
+An action is recommended **only when its 80% credible interval excludes zero**.
+Most weeks nothing clears that bar, and the app says so. That is deliberate:
+the model behind these numbers does not yet beat FPL's own expected points
+(see Limitations), so manufacturing a weekly pick would be dishonest.
+
+Early in the season, when the model has fewer than four historical rounds to
+draw from, the engine reports insufficient history rather than making a
+recommendation.
+
+`GET /api/decision?teamId=&leagueId=` returns the verdict. It is deterministic
+— seeded on the gameweek and entry — so the same week gives the same answer on
+refresh and on a second device. It makes no AI call.
+
 ## Limitations
 
 - Free-transfer count is not exposed by the public FPL API per gameweek, so the AI defaults to 1 free transfer. Use the prompt context if you have more banked.
