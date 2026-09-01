@@ -12,7 +12,8 @@ export type GateStatus = "recommend" | "too-close" | "locked" | "unavailable";
 
 export interface Evidence {
   label: string;
-  tab: "squad" | "rival" | "ai" | "matches" | "draft";
+  /** Must stay in sync with TabId in src/components/BottomNav.tsx. */
+  tab: "squad" | "vs" | "coach" | "matches" | "collection";
   params?: Record<string, string>;
 }
 

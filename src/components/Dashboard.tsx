@@ -30,6 +30,7 @@ import { DraftsPanel } from "@/components/DraftsPanel";
 import { IntelPanel } from "@/components/IntelPanel";
 import { ModelCalibrationPanel } from "@/components/ModelCalibrationPanel";
 import { ModelTrustBadge } from "@/components/ModelTrustBadge";
+import { DecisionSpine } from "@/components/DecisionSpine";
 import { RetrospectivePanel } from "@/components/RetrospectivePanel";
 import { LivePanel } from "@/components/LivePanel";
 import { NotificationToggle } from "@/components/NotificationToggle";
@@ -317,6 +318,10 @@ export function Dashboard({ teamId, leagueId, aiEnabled }: Props) {
         </div>
       </div>
 
+
+      <div className="mb-3">
+        <DecisionSpine teamId={teamId} leagueId={leagueId} onNavigate={setActiveTab} />
+      </div>
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabId)}>
         <TabsList className="hidden w-full justify-start md:flex">

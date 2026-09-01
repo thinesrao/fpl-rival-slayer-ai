@@ -142,7 +142,7 @@ describe("transferCandidates", () => {
 
   it("links to the rival tab as evidence", () => {
     const [c] = transferCandidates([option()], projection(), 1);
-    expect(c.evidence.some((e) => e.tab === "rival")).toBe(true);
+    expect(c.evidence.some((e) => e.tab === "vs")).toBe(true);
   });
 
   it("returns nothing for an empty option list", () => {

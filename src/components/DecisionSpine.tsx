@@ -5,7 +5,7 @@ import { useState } from "react";
 
 import { ModelTrustBadge } from "@/components/ModelTrustBadge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import type { Action, Decision, GateStatus } from "@/lib/decision/types";
+import type { Action, Decision, Evidence, GateStatus } from "@/lib/decision/types";
 
 export function verdictTone(status: GateStatus): "amber" | "green" | "muted" {
   if (status === "recommend") return "green";
@@ -51,7 +51,7 @@ export function DecisionSpine({
 }: {
   teamId: number;
   leagueId: number;
-  onNavigate: (tab: string, params?: Record<string, string>) => void;
+  onNavigate: (tab: Evidence["tab"], params?: Record<string, string>) => void;
 }) {
   const [showAlternatives, setShowAlternatives] = useState(false);
   const { data, isLoading, isError } = useQuery({

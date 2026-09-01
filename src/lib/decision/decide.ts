@@ -32,7 +32,7 @@ function rollAction(): Action {
     detail: "Nothing available this week clears the noise in our own projections.",
     overtakeDelta: { mean: 0, lower80: 0, upper80: 0, perRival: [] },
     hitCost: 0,
-    evidence: [{ label: "How your rivals are tracking", tab: "rival" }],
+    evidence: [{ label: "How your rivals are tracking", tab: "vs" }],
   };
 }
 

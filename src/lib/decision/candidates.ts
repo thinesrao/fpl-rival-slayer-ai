@@ -84,7 +84,7 @@ export function transferCandidates(
       variant: shifted(projection, option.netGainXi + hitCost),
       evidence: [
         { label: `${option.outWebName} → ${option.inWebName}`, tab: "squad" },
-        { label: "Effect on your rivals", tab: "rival" },
+        { label: "Effect on your rivals", tab: "vs" },
       ],
     };
   });
