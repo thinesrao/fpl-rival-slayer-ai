@@ -85,10 +85,12 @@ describe("captainCandidates", () => {
     expect(cs[0].headline).toContain("Alt");
   });
 
-  it("raises the projected total when the new captain outscores the old", () => {
+  it("raises the projected total by one copy of the difference, not two", () => {
     const base = projection();
     const cs = captainCandidates(squad(), base);
-    expect(cs[0].variant.startingXIPoints).toBeGreaterThan(base.startingXIPoints);
+    // startingXIPoints already contains the captain's points doubled, so moving
+    // the armband from Cap (5) to Alt (8) shifts the total by +3, not +6.
+    expect(cs[0].variant.startingXIPoints).toBeCloseTo(base.startingXIPoints + 3, 5);
   });
 
   it("never charges a hit for a captain change", () => {
@@ -103,6 +105,13 @@ describe("captainCandidates", () => {
 
   it("links to the squad tab as evidence", () => {
     expect(captainCandidates(squad(), projection())[0].evidence[0].tab).toBe("squad");
+  });
+
+  it("widens the spread when the new captain is more volatile", () => {
+    const base = projection();
+    const volatile = { ...base, perPlayer: base.perPlayer.map((p) => (p.playerId === 11 ? { ...p, variance: 36 } : p)) };
+    const cs = captainCandidates(squad(), volatile);
+    expect(cs[0].variant.stdev).toBeGreaterThan(base.stdev);
   });
 });
 

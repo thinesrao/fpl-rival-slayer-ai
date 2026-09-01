@@ -23,11 +23,12 @@ export interface Candidate {
 }
 
 /** Baseline projection shifted by a change to the starting-XI total. */
-function shifted(base: SquadProjection, delta: number): SquadProjection {
+function shifted(base: SquadProjection, delta: number, stdev?: number): SquadProjection {
   return {
     ...base,
     startingXIPoints: Number((base.startingXIPoints + delta).toFixed(2)),
     totalExpected: Number((base.totalExpected + delta).toFixed(2)),
+    ...(stdev !== undefined && { stdev }),
   };
 }
 
@@ -37,25 +38,33 @@ export function captainCandidates(squad: ManagerSquad, projection: SquadProjecti
 
   const byId = new Map(projection.perPlayer.map((p) => [p.playerId, p]));
   const currentXp = byId.get(current.player.id)?.xPoints ?? 0;
+  const currentVar = byId.get(current.player.id)?.variance ?? 0;
 
   const alternatives = squad.starters
     .filter((s) => s.player.id !== current.player.id)
-    .map((s) => ({ slot: s, xPoints: byId.get(s.player.id)?.xPoints ?? 0 }))
+    .map((s) => ({ slot: s, xPoints: byId.get(s.player.id)?.xPoints ?? 0, variance: byId.get(s.player.id)?.variance ?? 0 }))
     .sort((a, b) => b.xPoints - a.xPoints)
     .slice(0, CAPTAIN_ALTERNATIVES);
 
-  return alternatives.map(({ slot, xPoints }) => ({
-    kind: "captain" as const,
-    headline: `Captain ${slot.player.web_name}`,
-    detail: `Instead of ${current.player.web_name}. Armband doubles this pick.`,
-    hitCost: 0,
-    // Swapping the armband removes one copy of the old captain's points and
-    // adds one copy of the new one's.
-    variant: shifted(projection, xPoints - currentXp),
-    evidence: [
-      { label: `${slot.player.web_name} vs ${current.player.web_name}`, tab: "squad" },
-    ],
-  }));
+  return alternatives.map(({ slot, xPoints, variance }) => {
+    // Moving the armband changes total variance by 3 * (newVariance - currentVariance).
+    // Captain's variance is multiplied by 4 (multiplier 2^2), everyone else by 1.
+    const totalVar = projection.stdev ** 2 + 3 * (variance - currentVar);
+    const stdev = Number(Math.sqrt(Math.max(1, totalVar)).toFixed(2));
+
+    return {
+      kind: "captain" as const,
+      headline: `Captain ${slot.player.web_name}`,
+      detail: `Instead of ${current.player.web_name}. Armband doubles this pick.`,
+      hitCost: 0,
+      // Swapping the armband removes one copy of the old captain's points and
+      // adds one copy of the new one's.
+      variant: shifted(projection, xPoints - currentXp, stdev),
+      evidence: [
+        { label: `${slot.player.web_name} vs ${current.player.web_name}`, tab: "squad" },
+      ],
+    };
+  });
 }
 
 export function transferCandidates(
@@ -70,6 +79,8 @@ export function transferCandidates(
       headline: `Bring in ${option.inWebName}`,
       detail: `Sell ${option.outWebName} (${option.outTeamShort}) for ${option.inWebName} (${option.inTeamShort}).`,
       hitCost,
+      // stdev is left unchanged because TransferOption carries no variance for the
+      // incoming player — we cannot recompute the spread without that data.
       variant: shifted(projection, option.netGainXi + hitCost),
       evidence: [
         { label: `${option.outWebName} → ${option.inWebName}`, tab: "squad" },
