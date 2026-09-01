@@ -7,22 +7,17 @@
 // real-world standings gap (`pointsBehind`), since the user's goal is to leap
 // the rival in the table, not merely outscore them in a single GW.
 
+import { normalSampler } from "@/lib/decision/rng";
 import type { OvertakeOdds, RivalContext, SquadProjection } from "@/lib/types";
-
-function normalSample(mean: number, stdev: number): number {
-  // Box-Muller.
-  const u1 = Math.random() || 1e-12;
-  const u2 = Math.random() || 1e-12;
-  const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-  return mean + stdev * z;
-}
 
 export function computeOvertakeOdds(
   ctx: RivalContext,
   userProj: SquadProjection,
   rivalProjs: SquadProjection[],
   simulations = 2000,
+  rng: () => number = Math.random,
 ): OvertakeOdds[] {
+  const sample = normalSampler(rng);
   const odds: OvertakeOdds[] = [];
 
   for (let i = 0; i < ctx.rivals.length; i++) {
@@ -35,8 +30,8 @@ export function computeOvertakeOdds(
     let leaps = 0;
 
     for (let s = 0; s < simulations; s++) {
-      const userScore = normalSample(userProj.startingXIPoints, Math.max(1, userProj.stdev));
-      const rivalScore = normalSample(rivalProj.startingXIPoints, Math.max(1, rivalProj.stdev));
+      const userScore = sample(userProj.startingXIPoints, Math.max(1, userProj.stdev));
+      const rivalScore = sample(rivalProj.startingXIPoints, Math.max(1, rivalProj.stdev));
       if (userScore > rivalScore) beats++;
       if (userScore - rivalScore > pointsBehind) leaps++;
     }
