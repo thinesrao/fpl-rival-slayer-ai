@@ -46,7 +46,7 @@ export function captainCandidates(squad: ManagerSquad, projection: SquadProjecti
 
   return alternatives.map(({ slot, xPoints }) => ({
     kind: "captain" as const,
-    headline: `Armband to ${slot.player.web_name}`,
+    headline: `Captain ${slot.player.web_name}`,
     detail: `Instead of ${current.player.web_name}. Armband doubles this pick.`,
     hitCost: 0,
     // Swapping the armband removes one copy of the old captain's points and

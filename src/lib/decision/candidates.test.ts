@@ -73,8 +73,11 @@ describe("captainCandidates", () => {
   });
 
   it("never proposes the current captain", () => {
-    const names = captainCandidates(squad(), projection()).map((c) => c.headline);
-    expect(names.some((n) => n.includes("Cap"))).toBe(false);
+    const headlines = captainCandidates(squad(), projection()).map((c) => c.headline);
+    // Exact match, not a substring: "Captain Alt" legitimately contains "Cap",
+    // and so would any real player named Capoue or Caprile.
+    expect(headlines).not.toContain("Captain Cap");
+    expect(headlines).toHaveLength(3);
   });
 
   it("orders alternatives by expected points, highest first", () => {
