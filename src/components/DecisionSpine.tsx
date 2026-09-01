@@ -15,11 +15,21 @@ export function verdictTone(status: GateStatus): "amber" | "green" | "muted" {
 
 export function formatDelta(action: Action): string {
   const pct = (v: number) => `${v >= 0 ? "+" : "-"}${Math.abs(v * 100).toFixed(1)}%`;
-  const band = `${Math.abs(action.overtakeDelta.lower80 * 100).toFixed(1)}% to ${Math.abs(
-    action.overtakeDelta.upper80 * 100,
-  ).toFixed(1)}%`;
-  const hit = action.hitCost !== 0 ? ` after a ${action.hitCost} hit` : "";
-  return `${pct(action.overtakeDelta.mean)} overtake odds (80% range ${band})${hit}`;
+  const { mean, lower80, upper80 } = action.overtakeDelta;
+  const hit = action.hitCost !== 0 ? ` after a ${Math.abs(action.hitCost)}-point hit` : "";
+  return `${pct(mean)} overtake odds (80% range ${pct(lower80)} to ${pct(upper80)})${hit}`;
+}
+
+export type SpineState = "loading" | "error" | "ready";
+
+export function spineState(args: { isLoading: boolean; isError: boolean; hasData: boolean }): SpineState {
+  if (args.isLoading) return "loading";
+  if (args.isError || !args.hasData) return "error";
+  return "ready";
+}
+
+export function showsTrustBadge(status: GateStatus): boolean {
+  return status === "recommend" || status === "too-close";
 }
 
 const TONE_CLASS: Record<ReturnType<typeof verdictTone>, string> = {
@@ -49,14 +59,23 @@ export function DecisionSpine({
     queryFn: () => fetchDecision(teamId, leagueId),
   });
 
-  if (isLoading) {
+  const state = spineState({ isLoading, isError, hasData: !!data });
+
+  if (state === "loading") {
     return (
       <Card className="border-border bg-card/40">
         <CardContent className="py-4 text-sm text-muted-foreground">Working out your week…</CardContent>
       </Card>
     );
   }
-  if (isError || !data) return null;
+
+  if (state === "error" || !data) {
+    return (
+      <Card className="border-border bg-card/40">
+        <CardContent className="py-4 text-sm text-muted-foreground">Could not compute the verdict.</CardContent>
+      </Card>
+    );
+  }
 
   const tone = verdictTone(data.gateStatus);
 
@@ -77,7 +96,7 @@ export function DecisionSpine({
           <p className="text-sm font-medium">{formatDelta(data.verdict)}</p>
         )}
 
-        <ModelTrustBadge />
+        {showsTrustBadge(data.gateStatus) && <ModelTrustBadge />}
 
         {data.verdict.evidence.length > 0 && (
           <div className="flex flex-wrap gap-2">
