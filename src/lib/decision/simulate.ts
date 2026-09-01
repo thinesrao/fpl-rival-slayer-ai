@@ -17,18 +17,14 @@
 // Each draw consumes exactly one shared normal deviate for the user (scaled
 // separately for baseline and variant) and, per rival, one deviate from that
 // rival's OWN stream (shared between baseline and variant, but independent
-// of every other rival's distribution). Each rival gets its own stream,
-// keyed by batch seed plus the rival's own (expected, stdev, pointsBehind) —
-// not by its position in the array or its identity — rather than sharing
-// one stream sequentially. That keeps each stream's consumption rate
-// constant regardless of how many rivals are being evaluated (so summing
-// the delta across an arbitrary set of rivals is exact, not merely close),
-// and keeps rivals with genuinely different distributions independent of
-// one another (no artificial lockstep — one rival having a good week
-// doesn't imply another one does). Two rivals that happen to share the same
-// distribution draw the same stream, which is the only way for their
-// contributions to a summed delta to agree exactly rather than merely in
-// expectation.
+// of every other rival). Each rival gets its own stream, keyed by batch seed
+// and rival index — rather than sharing one stream sequentially — so that
+// each stream's consumption rate is constant regardless of how many rivals
+// are being evaluated, and different rivals draw genuinely independently of
+// one another. Two managers with similar projections are still two
+// different people with two different squads: summing the delta across
+// several rivals is therefore close to additive, not exactly additive — real
+// statistical independence, not an artifact of shared draws.
 
 import { hashSeed, mulberry32, normalSampler } from "@/lib/decision/rng";
 import type { SquadProjection } from "@/lib/types";
@@ -76,14 +72,11 @@ export function simulateDelta(args: {
     // Each batch gets its own streams, derived from the run seed so the
     // whole distribution is reproducible. The user stream and each rival's
     // stream are independent of one another, and each rival's stream is
-    // keyed by that rival's own distribution — not by its position in the
-    // array — so consumption is constant regardless of how many rivals are
-    // present.
+    // keyed by its index — not by anything that depends on rivals.length —
+    // so consumption is constant regardless of how many rivals are present.
     const batchSeed = (seed + b * 0x9e3779b9) >>> 0;
     const sampleUser = normalSampler(mulberry32(batchSeed));
-    const sampleRival = rivals.map((r) =>
-      normalSampler(mulberry32(hashSeed(batchSeed, "rival", r.expected, r.stdev, r.pointsBehind))),
-    );
+    const sampleRival = rivals.map((_, i) => normalSampler(mulberry32(hashSeed(batchSeed, "rival", i))));
     let batchDelta = 0;
 
     for (let d = 0; d < DRAWS_PER_BATCH; d++) {

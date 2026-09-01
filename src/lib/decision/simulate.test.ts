@@ -90,7 +90,22 @@ describe("simulateDelta", () => {
       baseline: squad(50), variant: squad(56),
       rivals: [rival({ entryId: 2 }), rival({ entryId: 3 })], seed: 5,
     });
-    expect(two.mean).toBeCloseTo(one.mean * 2, 5);
+    // Each rival draws from its own stream, so two rivals with the same
+    // distribution contribute independently — the sum is close to double, not
+    // exactly double. Exact doubling would mean the rivals were perfectly
+    // correlated, which is what the per-rival streams deliberately avoid.
+    expect(two.mean).toBeCloseTo(one.mean * 2, 2);
+  });
+
+  it("draws each rival independently rather than in lockstep", () => {
+    // Two rivals with identical distributions must not produce identical
+    // sampled outcomes; if they did, their streams would be shared.
+    const d = simulateDelta({
+      baseline: squad(50), variant: squad(56),
+      rivals: [rival({ entryId: 2, name: "A" }), rival({ entryId: 3, name: "B" })],
+      seed: 5,
+    });
+    expect(d.perRival[0].before).not.toBe(d.perRival[1].before);
   });
 
   it("has a smaller delta interval than independent sampling would", () => {
