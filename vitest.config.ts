@@ -12,7 +12,7 @@ export default defineConfig({
     environment: "node",
     coverage: {
       provider: "v8",
-      include: ["src/lib/backtest/**", "src/lib/projections/**"],
+      include: ["src/lib/backtest/**", "src/lib/projections/**", "src/lib/decision/**"],
       thresholds: { lines: 80, functions: 80, branches: 70, statements: 80 },
     },
   },
