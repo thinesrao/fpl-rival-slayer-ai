@@ -86,7 +86,9 @@ export function transferCandidates(
     const hitCost = freeTransfers > 0 ? 0 : HIT_COST;
     return {
       kind: "transfer" as const,
-      headline: `Bring in ${option.inWebName}`,
+      // Both names, because several options can share an incoming player and
+      // a list of identical headlines defeats the point of showing what lost.
+      headline: `Swap ${option.outWebName} for ${option.inWebName}`,
       detail: `Sell ${option.outWebName} (${option.outTeamShort}) for ${option.inWebName} (${option.inTeamShort}).`,
       hitCost,
       // variantStdev is the post-swap squad's own stdev, already computed by
