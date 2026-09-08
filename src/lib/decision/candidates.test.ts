@@ -138,7 +138,18 @@ describe("transferCandidates", () => {
   it("names both players in the headline", () => {
     const [c] = transferCandidates([option()], projection(), 1);
     expect(c.headline).toContain("Newman");
+    expect(c.headline).toContain("Fourth");
     expect(c.detail).toContain("Fourth");
+  });
+
+  it("gives options sharing an incoming player distinct headlines", () => {
+    const cands = transferCandidates(
+      [option(), option({ id: "OPT-02", outPlayerId: 14, outWebName: "Fifth", outTeamShort: "CCC" })],
+      projection(),
+      1,
+    );
+    const headlines = cands.map((c) => c.headline);
+    expect(new Set(headlines).size).toBe(headlines.length);
   });
 
   it("links to the rival tab as evidence", () => {

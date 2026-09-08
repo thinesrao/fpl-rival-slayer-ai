@@ -15,9 +15,20 @@ export function verdictTone(status: GateStatus): "amber" | "green" | "muted" {
 
 export function formatDelta(action: Action): string {
   const pct = (v: number) => `${v >= 0 ? "+" : "-"}${Math.abs(v * 100).toFixed(1)}%`;
-  const { mean, lower80, upper80 } = action.overtakeDelta;
+  const { mean, lower80, upper80, perRival } = action.overtakeDelta;
+
+  // The simulator sums the overtake-probability change across every tracked
+  // rival, because beating more rivals should rank higher. That sum is not
+  // itself a probability — with three rivals it reaches 0.68 while no single
+  // rival moved more than 0.23 — so divide it back down before showing it.
+  // With no rivals the delta is already the single overall-rank figure.
+  const rivals = perRival.length;
+  const per = rivals > 0 ? (v: number) => v / rivals : (v: number) => v;
+  const scope = rivals > 0 ? " per rival" : "";
+
   const hit = action.hitCost !== 0 ? ` after a ${Math.abs(action.hitCost)}-point hit` : "";
-  return `${pct(mean)} overtake odds (80% range ${pct(lower80)} to ${pct(upper80)})${hit}`;
+  const range = `(80% range ${pct(per(lower80))} to ${pct(per(upper80))})`;
+  return `${pct(per(mean))} overtake odds${scope} ${range}${hit}`;
 }
 
 export type SpineState = "loading" | "error" | "ready";

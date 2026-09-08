@@ -3,13 +3,31 @@ import { describe, expect, it } from "vitest";
 import { formatDelta, showsTrustBadge, spineState, verdictTone } from "@/components/DecisionSpine";
 import type { Action } from "@/lib/decision/types";
 
-const action = (mean: number, lower80: number, upper80: number, hitCost = 0): Action => ({
+const rival = (i: number) => ({
+  rivalEntryId: i,
+  rivalName: `Rival ${i}`,
+  before: 0.4,
+  after: 0.6,
+});
+
+const action = (
+  mean: number,
+  lower80: number,
+  upper80: number,
+  hitCost = 0,
+  rivalCount = 0,
+): Action => ({
   kind: "transfer",
-  headline: "Bring in Semenyo",
+  headline: "Swap Szoboszlai for Semenyo",
   detail: "",
   hitCost,
   evidence: [],
-  overtakeDelta: { mean, lower80, upper80, perRival: [] },
+  overtakeDelta: {
+    mean,
+    lower80,
+    upper80,
+    perRival: Array.from({ length: rivalCount }, (_, i) => rival(i)),
+  },
 });
 
 describe("verdictTone", () => {
@@ -62,6 +80,30 @@ describe("formatDelta", () => {
 
   it("says nothing about a hit when there is none", () => {
     expect(formatDelta(action(0.05, 0.02, 0.08, 0))).not.toContain("hit");
+  });
+
+  // overtakeDelta is summed across rivals, so rendering it raw as a single
+  // percentage overstates the effect by a factor of the rival count.
+  it("divides the summed delta by the rival count", () => {
+    const s = formatDelta(action(0.6768, 0.642, 0.712, 0, 3));
+    expect(s).toContain("+22.6%");
+    expect(s).not.toContain("+67.7%");
+  });
+
+  it("divides the interval bounds by the same rival count", () => {
+    const s = formatDelta(action(0.6768, 0.642, 0.712, 0, 3));
+    expect(s).toContain("+21.4%");
+    expect(s).toContain("+23.7%");
+  });
+
+  it("says the figure is per rival when rivals are tracked", () => {
+    expect(formatDelta(action(0.6768, 0.642, 0.712, 0, 3))).toContain("per rival");
+  });
+
+  it("leaves the figure alone when there are no rivals to average over", () => {
+    const s = formatDelta(action(0.042, 0.01, 0.07, 0, 0));
+    expect(s).toContain("+4.2%");
+    expect(s).not.toContain("per rival");
   });
 });
 
