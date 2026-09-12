@@ -36,7 +36,7 @@ export interface SeedPlayer {
 }
 
 /** Where the squad came from — the client uses this to label the draft. */
-export type SeedSource = "confirmed" | "pending";
+export type SeedSource = "confirmed" | "pending" | "suggested";
 
 export interface DraftSeed {
   /** The gameweek this squad is for. */
@@ -56,7 +56,8 @@ export interface DraftSeed {
   /**
    * "confirmed" — the deadline has passed and this is what the public API
    * serves. "pending" — read from the manager's own account before the
-   * deadline, so it can still change.
+   * deadline, so it can still change. "suggested" — nobody owns this squad;
+   * the optimiser built it.
    */
   source: SeedSource;
   summary: SeedPlayer[];

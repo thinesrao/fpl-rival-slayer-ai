@@ -148,6 +148,54 @@ cookie. Handling of that credential is deliberately narrow:
 Signing out of FPL invalidates the cookie. Building the squad by hand with
 **New draft** needs no credential at all and reaches the same critique.
 
+## Suggesting a wildcard squad
+
+`GET /api/wildcard?teamId=` returns the best legal 15 that manager could buy,
+with the XI and armband to start from it, shaped exactly like the other draft
+seeds so the Drafts tab opens it in the editor. **Suggest wildcard** in that
+tab is the button for it.
+
+The budget is their real spending power — bank plus what the current squad is
+worth — not a flat £100m, so the answer is one they can actually execute.
+`budget`, `horizon`, `source`, `benchWeight` and `exact` all override the
+defaults.
+
+**What it optimises.** A wildcard buys a squad you keep for weeks, so the
+objective spans a five-gameweek horizon discounted geometrically (0.85 per
+week) rather than the next gameweek alone — optimising one week produces the
+classic mistake of loading up on one good fixture and paying to unwind it.
+Benched players count for 12% of their points, which is what stops the solver
+buying eleven stars and four players who will never appear. The armband is
+scored on the next gameweek only, since that is the only week's captain being
+chosen now.
+
+**Where the points come from.** By default, FPL's own published `ep_next`.
+That is not a preference — `npm run backtest` measures our closed-form model
+against it and FPL's is currently far better at *ranking* players (Spearman
+0.529 vs 0.158), which is all a squad optimiser reads. The same ship gate that
+drives the ModelTrustBadge picks the source, so the two never disagree about
+which number to trust; pass `source=model` to use ours anyway.
+
+**How it is solved.** Two solvers live in `src/lib/optimizer/`:
+
+- `wildcard-milp.ts` states the problem exactly as a mixed-integer program.
+  It is the reference answer and the test oracle, but it does not serve
+  requests: `javascript-lp-solver`'s branch-and-bound has no time bound, and
+  on one real gameweek its cost ranged from 10ms to 13.5s — with the worst
+  cases landing on exactly the budget a real manager has. A symmetric
+  synthetic pool of 144 variables never finished at all.
+- `wildcard.ts` is the default: a deterministic multi-start search over
+  same-position swaps, plus a two-move exchange that funds an upgrade with a
+  downgrade elsewhere. On the real pool it runs in 96-698ms and lands within
+  0.29% of the exact optimum — comfortably inside the ±2.6-point RMSE of the
+  projections it is optimising. `exact=1` runs the MILP instead.
+
+`wildcard-pool.ts` prunes the ~490-player pool to the ~230 that can appear in
+an optimal squad, by unioning the cost/points Pareto frontier, the best few
+per position per club (a squad may legally take three), and the cheapest few
+per position. Verified against live data: the optimum is unchanged from that
+shortlist all the way up to the full unpruned pool.
+
 ## The decision spine
 
 The dashboard opens with one verdict: the single change most worth making this
