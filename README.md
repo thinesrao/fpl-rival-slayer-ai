@@ -119,6 +119,35 @@ curl -s https://<deployment>/api/diag | jq
 and whether the body is JSON or a Cloudflare challenge, plus booleans for which env
 vars are set (never their values). Start here when FPL data stops loading.
 
+## Drafts and importing a pending squad
+
+The Draft tab keeps as many what-if squads as you like, each rated by the AI
+critique. **New draft** seeds one from your latest locked-in squad: bank, squad
+value, captain, vice, and the bench order you actually set, all read from
+`GET /api/my-squad-draft-seed?teamId=`.
+
+That route can only ever see a squad whose deadline has passed —
+`/entry/{id}/event/{gw}/picks/` 404s until then — so the wildcard team you saved
+on Friday is invisible to it until Saturday, by which point it is locked. It now
+asks for the upcoming gameweek as soon as that deadline is behind us, rather than
+staying a gameweek behind, but it cannot see further forward than that.
+
+**Import saved** covers the gap. `POST /api/my-team` reads
+`fantasy.premierleague.com/api/my-team/{id}/`, the one endpoint that returns a
+squad saved for an upcoming deadline, and it needs the manager's own FPL login
+cookie. Handling of that credential is deliberately narrow:
+
+- it arrives per request and is never written to disk, Redis, or a log;
+- the response is never cached;
+- the request goes **direct** to FPL and never takes the `FPL_PROXY_URL` failover
+  path — that proxy is separate infrastructure and has no business seeing a
+  session cookie;
+- the browser keeps it in component state for the length of one request and
+  never in `localStorage`.
+
+Signing out of FPL invalidates the cookie. Building the squad by hand with
+**New draft** needs no credential at all and reaches the same critique.
+
 ## The decision spine
 
 The dashboard opens with one verdict: the single change most worth making this

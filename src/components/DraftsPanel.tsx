@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeftRight, ClipboardList, Loader2, Pencil, Plus, Share2, Trash2 } from "lucide-react";
+import { ArrowLeftRight, ClipboardList, KeyRound, Loader2, Pencil, Plus, Share2, Trash2 } from "lucide-react";
 import { encodeDraft } from "@/lib/drafts/encode";
 import { CompareDrafts } from "@/components/CompareDrafts";
 import { toast } from "sonner";
@@ -10,21 +10,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DraftEditor } from "@/components/DraftEditor";
+import { FplSquadImport } from "@/components/FplSquadImport";
+import type { DraftSeed } from "@/lib/drafts/seed";
 import { emptyDraft, type PickerPlayer, type SquadDraft } from "@/lib/drafts/types";
 import { deleteDraft, loadDrafts } from "@/lib/drafts/storage";
 import { validateDraft } from "@/lib/drafts/validate";
-
-interface DraftSeed {
-  gw: number;
-  bank: number;
-  squadValue: number;
-  budget: number;
-  picks: (number | null)[];
-  captainId: number | null;
-  viceId: number | null;
-  startingXI: number[];
-  formation: string;
-}
 
 interface Props {
   teamId: number;
@@ -35,6 +25,7 @@ export function DraftsPanel({ teamId }: Props) {
   const [editing, setEditing] = useState<SquadDraft | null>(null);
   const [comparing, setComparing] = useState(false);
   const [seedLoading, setSeedLoading] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     setDrafts(loadDrafts(teamId));
@@ -52,6 +43,18 @@ export function DraftsPanel({ teamId }: Props) {
   const byId = new Map<number, PickerPlayer>();
   playersQ.data?.players.forEach((p) => byId.set(p.id, p));
 
+  /** Turn a seeded squad into an unsaved draft and open the editor on it. */
+  const openSeededDraft = (seed: DraftSeed, name: string) => {
+    const next = emptyDraft(name);
+    next.budget = seed.budget;
+    next.picks = seed.picks;
+    next.captainId = seed.captainId;
+    next.viceId = seed.viceId;
+    next.startingXI = seed.startingXI;
+    next.formation = seed.formation;
+    setEditing(next);
+  };
+
   const createDraft = async () => {
     setSeedLoading(true);
     try {
@@ -64,19 +67,25 @@ export function DraftsPanel({ teamId }: Props) {
         return;
       }
       const seed = body as DraftSeed;
-      const next = emptyDraft(`GW${seed.gw + 1} draft ${String.fromCharCode(65 + drafts.length)}`);
-      next.budget = seed.budget;
-      next.picks = seed.picks;
-      next.captainId = seed.captainId;
-      next.viceId = seed.viceId;
-      next.startingXI = seed.startingXI;
-      next.formation = seed.formation;
-      setEditing(next);
+      openSeededDraft(seed, `GW${seed.gw + 1} draft ${String.fromCharCode(65 + drafts.length)}`);
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
       setSeedLoading(false);
     }
+  };
+
+  const handleImported = (seed: DraftSeed) => {
+    const chip = seed.activeChip
+      ? seed.activeChip.replace("freehit", "free hit").replace("3xc", "triple captain")
+      : null;
+    openSeededDraft(seed, `GW${seed.gw}${chip ? ` ${chip}` : ""} squad`);
+    setImporting(false);
+    toast.success(
+      chip
+        ? `Imported your GW${seed.gw} ${chip} squad — roast it before the deadline.`
+        : `Imported your saved GW${seed.gw} squad.`,
+    );
   };
 
   const handleSaved = () => {
@@ -107,9 +116,10 @@ export function DraftsPanel({ teamId }: Props) {
             <ClipboardList className="h-4 w-4 text-fut-gold" /> Draft
           </CardTitle>
           <CardDescription>
-            Each new draft starts from your current squad and bank balance. Make transfers, change
-            formation, swap captain — save as many what-if scenarios as you like, then pick one
-            before the deadline.
+            Each new draft starts from your latest locked-in squad and bank balance. Make
+            transfers, change formation, swap captain — save as many what-if scenarios as you like,
+            then pick one before the deadline. Already picked a squad in the FPL app (a wildcard,
+            say)? <strong>Import saved</strong> pulls it in before the deadline locks it.
           </CardDescription>
         </div>
         <div className="flex gap-2">
@@ -118,6 +128,9 @@ export function DraftsPanel({ teamId }: Props) {
               <ArrowLeftRight className="mr-1 h-4 w-4" /> Compare
             </Button>
           )}
+          <Button size="sm" variant="outline" onClick={() => setImporting(true)}>
+            <KeyRound className="mr-1 h-4 w-4" /> Import saved
+          </Button>
           <Button size="sm" onClick={createDraft} disabled={seedLoading}>
             {seedLoading ? (
               <Loader2 className="mr-1 h-4 w-4 animate-spin" />
@@ -200,6 +213,13 @@ export function DraftsPanel({ teamId }: Props) {
       {comparing && (
         <CompareDrafts drafts={drafts} onClose={() => setComparing(false)} />
       )}
+
+      <FplSquadImport
+        open={importing}
+        teamId={teamId}
+        onClose={() => setImporting(false)}
+        onImported={handleImported}
+      />
     </Card>
   );
 }

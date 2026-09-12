@@ -1,18 +1,27 @@
 // Seed a new SquadDraft from the user's current FPL squad. Used by the
-// Drafts tab so "New draft" pre-populates with the user's GW N picks,
-// captain, vice, bank balance, and squad value. The user then makes
-// transfers and saves it as their plan for GW N+1.
+// Drafts tab so "New draft" pre-populates with the user's latest picks,
+// captain, vice, bench order, bank balance, and squad value. The user then
+// makes transfers and saves it as their plan for the next gameweek.
+//
+// "Latest" means the most recent gameweek the public API will actually serve:
+// `/entry/{id}/event/{gw}/picks/` 404s until that gameweek's deadline has
+// passed. So the moment a deadline goes by, this picks up the squad that just
+// locked in — a wildcard team included — instead of staying a gameweek behind.
+// Before the deadline, /api/my-team is the only route to a pending squad.
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import {
   FplError,
+  currentEvent,
   getBootstrap,
   getEntry,
   getEntryHistory,
-  currentEvent,
+  getPicks,
+  nextEvent,
 } from "@/lib/fpl/client";
-import { buildMySquadLive } from "@/lib/fpl/my-squad-live";
+import { buildDraftSeed, type SeedPick } from "@/lib/drafts/seed";
+import type { FplBootstrap, FplPicksResponse } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,13 +30,38 @@ const Query = z.object({
   teamId: z.coerce.number().int().positive(),
 });
 
-const POSITIONS = ["?", "GKP", "DEF", "MID", "FWD"] as const;
+/** Gameweeks to try, newest first. The next gameweek only becomes readable
+ *  once its deadline passes, and FPL can lag on flipping `is_current`, so we
+ *  ask for it whenever the clock says it should be there. */
+function candidateGameweeks(bs: FplBootstrap): number[] {
+  const current = currentEvent(bs);
+  const next = nextEvent(bs);
+  const gws: number[] = [];
+  if (next && Date.now() >= new Date(next.deadline_time).getTime()) gws.push(next.id);
+  if (current) gws.push(current.id);
+  return gws.length > 0 ? [...new Set(gws)] : [1];
+}
 
-interface SeedPlayer {
-  id: number;
-  webName: string;
-  position: "GKP" | "DEF" | "MID" | "FWD";
-  isStarter: boolean;
+async function loadLatestPicks(
+  teamId: number,
+  bs: FplBootstrap,
+): Promise<{ gw: number; picks: FplPicksResponse }> {
+  const candidates = candidateGameweeks(bs);
+  let lastError: unknown = null;
+  for (const gw of candidates) {
+    try {
+      return { gw, picks: await getPicks(teamId, gw) };
+    } catch (err) {
+      // A 404 here just means "not published yet" — fall through to the
+      // previous gameweek. Anything else is a real failure.
+      if (err instanceof FplError && err.status === 404) {
+        lastError = err;
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError ?? new FplError(404, `No published picks for team ${teamId}.`);
 }
 
 export async function GET(req: NextRequest) {
@@ -39,15 +73,15 @@ export async function GET(req: NextRequest) {
 
   try {
     const bs = await getBootstrap();
-    const current = currentEvent(bs);
-    const targetGw = current?.id ?? 1;
-    const [squad, entry, history] = await Promise.all([
-      buildMySquadLive(teamId, targetGw),
+    const [{ gw, picks }, entry, history] = await Promise.all([
+      loadLatestPicks(teamId, bs),
       getEntry(teamId),
-      getEntryHistory(teamId),
+      getEntryHistory(teamId).catch(() => null),
     ]);
 
-    const all = [...squad.starters, ...squad.bench];
+    const elementTypeById = new Map(bs.elements.map((e) => [e.id, e.element_type]));
+    const webNameById = new Map(bs.elements.map((e) => [e.id, e.web_name]));
+    const nowCostById = new Map(bs.elements.map((e) => [e.id, e.now_cost]));
 
     // Squad value = sum of current now_cost across the 15 picks. This
     // matches the FPL app's "Squad Value" display (modulo selling-price
@@ -63,69 +97,33 @@ export async function GET(req: NextRequest) {
     // (cap − current squad value) would be too high. Issue surfaced
     // for team 942359: API value=£100.1m, true cap=£99.9m, drift
     // matched two £0.1m price drops since purchase.
-    const nowCostById = new Map(bs.elements.map((e) => [e.id, e.now_cost]));
-    const squadValue = all.reduce((s, p) => s + (nowCostById.get(p.playerId) ?? 0), 0);
+    const seedPicks: SeedPick[] = picks.picks.map((p) => ({
+      elementId: p.element,
+      position: p.position,
+      isCaptain: p.is_captain,
+      isVice: p.is_vice_captain,
+      value: nowCostById.get(p.element) ?? 0,
+    }));
 
     let bank: number;
     if (entry.last_deadline_bank != null) {
       bank = entry.last_deadline_bank;
     } else {
-      const finished = history.current.filter((c) => c.event <= targetGw);
-      const lastRow = finished[finished.length - 1] ?? null;
-      bank = lastRow?.bank ?? 0;
+      const finished = history?.current.filter((c) => c.event <= gw) ?? [];
+      bank = finished[finished.length - 1]?.bank ?? 0;
     }
-    const cap = bank + squadValue;
 
-    // Order picks slot-by-slot to match SquadDraft.picks contract:
-    // GK1, GK2, DEF1..5, MID1..5, FWD1..3.
-    const groups: Record<1 | 2 | 3 | 4, typeof all> = { 1: [], 2: [], 3: [], 4: [] };
-    for (const p of all) groups[p.elementType].push(p);
-
-    const ordered: typeof all = [
-      ...groups[1].slice(0, 2),
-      ...groups[2].slice(0, 5),
-      ...groups[3].slice(0, 5),
-      ...groups[4].slice(0, 3),
-    ];
-
-    const picks: (number | null)[] = ordered.map((p) => p.playerId);
-    // Pad to 15 in case the user is mid-season with incomplete data.
-    while (picks.length < 15) picks.push(null);
-
-    const captain = all.find((p) => p.isCaptain);
-    const vice = all.find((p) => p.isVice);
-
-    const startingXI = all.filter((p) => p.isStarter).map((p) => p.playerId);
-
-    // Pick the active formation from the actual starting XI counts.
-    const counts = { DEF: 0, MID: 0, FWD: 0 };
-    for (const p of all) {
-      if (!p.isStarter) continue;
-      if (p.elementType === 2) counts.DEF++;
-      if (p.elementType === 3) counts.MID++;
-      if (p.elementType === 4) counts.FWD++;
-    }
-    const formation = `${counts.DEF}-${counts.MID}-${counts.FWD}`;
-
-    const summary: SeedPlayer[] = ordered.map((p) => ({
-      id: p.playerId,
-      webName: p.webName,
-      position: POSITIONS[p.elementType] as SeedPlayer["position"],
-      isStarter: p.isStarter,
-    }));
-
-    return NextResponse.json({
-      gw: targetGw,
+    const seed = buildDraftSeed({
+      gw,
       bank,
-      squadValue,
-      budget: cap,
-      picks,
-      captainId: captain?.playerId ?? null,
-      viceId: vice?.playerId ?? null,
-      startingXI,
-      formation,
-      summary,
+      picks: seedPicks,
+      elementTypeById,
+      webNameById,
+      activeChip: picks.active_chip,
+      source: "confirmed",
     });
+
+    return NextResponse.json(seed);
   } catch (err) {
     if (err instanceof FplError) {
       return NextResponse.json({ error: "fpl_error", message: err.message }, { status: err.status });

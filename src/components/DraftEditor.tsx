@@ -17,7 +17,7 @@ import { encodeDraft } from "@/lib/drafts/encode";
 import {
   FORMATIONS,
   type Formation,
-  pickStartingXI,
+  resolveStartingXI,
   safeFormation,
 } from "@/lib/drafts/formation";
 import { toast } from "sonner";
@@ -76,10 +76,12 @@ export function DraftEditor({ teamId, initial, onClose, onSaved }: Props) {
     [draft, byId],
   );
 
-  // Live starting XI from formation × totalPoints. Bench = remaining picks.
+  // Starting XI: the draft's own (a squad seeded from FPL carries the
+  // manager's bench order), repaired against the current formation and picks.
+  // Bench = the remaining picks.
   const startingXI = useMemo(() => {
     if (!byId.size) return new Set<number>();
-    return new Set(pickStartingXI(draft, byId, formation));
+    return new Set(resolveStartingXI(draft, byId, formation));
   }, [draft, byId, formation]);
 
   // Mutators ------------------------------------------------------------------
