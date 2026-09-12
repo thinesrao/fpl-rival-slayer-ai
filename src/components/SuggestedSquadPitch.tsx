@@ -147,14 +147,15 @@ function Row({ players, onTileClick, bottomMode, registerAnchor, highlight }: Ro
   return (
     <div className="flex w-full justify-around gap-0.5 sm:gap-1.5">
       {players.map((p, i) => (
-        <Tile
-          key={`${p.playerId}-${i}`}
-          player={p}
-          onClick={onTileClick}
-          bottomMode={bottomMode}
-          registerAnchor={registerAnchor}
-          highlight={highlight?.(p.playerId) ?? null}
-        />
+        <div key={`${p.playerId}-${i}`} className="flex min-w-0 max-w-[88px] flex-1 basis-0 justify-center">
+          <Tile
+            player={p}
+            onClick={onTileClick}
+            bottomMode={bottomMode}
+            registerAnchor={registerAnchor}
+            highlight={highlight?.(p.playerId) ?? null}
+          />
+        </div>
       ))}
     </div>
   );
@@ -163,13 +164,12 @@ function Row({ players, onTileClick, bottomMode, registerAnchor, highlight }: Ro
 interface TileProps {
   player: ResolvedPlayer;
   onClick?: (id: number, name: string) => void;
-  small?: boolean;
   bottomMode: BottomMode;
   registerAnchor?: (playerId: number, el: HTMLElement | null) => void;
   highlight?: "captain" | "vice" | null;
 }
 
-function Tile({ player, onClick, small = false, bottomMode, registerAnchor, highlight }: TileProps) {
+function Tile({ player, onClick, bottomMode, registerAnchor, highlight }: TileProps) {
   const clickable = !!onClick && player.playerId > 0;
   const ovr = playerOvr(player.xPoints);
   const tier = playerTier(ovr);
@@ -187,8 +187,7 @@ function Tile({ player, onClick, small = false, bottomMode, registerAnchor, high
         registerAnchor(player.playerId, el);
       }}
       className={cn(
-        "relative flex min-w-0 flex-1 basis-0 flex-col items-center transition-all",
-        small ? "max-w-[72px]" : "max-w-[88px]",
+        "relative flex w-full min-w-0 flex-col items-center transition-all",
         hoverGold && "scale-[1.08] z-10",
         hoverSilver && "scale-[1.08] z-10",
       )}
@@ -247,12 +246,11 @@ function BenchStrip({ bench, onTileClick, bottomMode, registerAnchor, highlight 
       </div>
       <div className="flex w-full justify-around gap-0.5 sm:gap-1.5">
         {bench.map((p, i) => (
-          <div key={`${p.playerId}-${i}`} className="flex min-w-0 flex-1 basis-0 max-w-[88px] flex-col items-center gap-1">
+          <div key={`${p.playerId}-${i}`} className="flex min-w-0 max-w-[72px] flex-1 basis-0 flex-col items-center gap-1">
             <div className="text-[9px] font-semibold uppercase text-muted-foreground">{labels[i]}</div>
             <Tile
               player={p}
               onClick={onTileClick}
-              small
               bottomMode={bottomMode}
               registerAnchor={registerAnchor}
               highlight={highlight?.(p.playerId) ?? null}

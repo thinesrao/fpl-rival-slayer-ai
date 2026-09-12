@@ -55,6 +55,55 @@ export function pickStartingXI(
   return xi;
 }
 
+/**
+ * The XI to render for a draft: keep whatever starting XI the draft already
+ * carries (a squad seeded from FPL brings the manager's own bench order with
+ * it) and only auto-pick the slots it can't account for.
+ *
+ * A stored XI goes stale as soon as the user transfers someone out or changes
+ * formation, so each position is trimmed to the formation's shape and any
+ * shortfall is filled from the remaining picks by totalPoints — a repair
+ * rather than a re-derivation, so one transfer doesn't reshuffle the XI.
+ */
+export function resolveStartingXI(
+  draft: SquadDraft,
+  byId: Map<number, PickerPlayer>,
+  formation: Formation,
+): number[] {
+  const stored = draft.startingXI;
+  if (!stored || stored.length === 0) return pickStartingXI(draft, byId, formation);
+
+  const shape = parseFormation(formation);
+  const inSquad = new Set(draft.picks.filter((id): id is number => id != null));
+
+  const kept: Record<Position, number[]> = { GKP: [], DEF: [], MID: [], FWD: [] };
+  const seen = new Set<number>();
+  for (const id of stored) {
+    if (!inSquad.has(id) || seen.has(id)) continue;
+    const p = byId.get(id);
+    if (!p) continue;
+    if (kept[p.position].length >= shape[p.position]) continue;
+    kept[p.position].push(id);
+    seen.add(id);
+  }
+
+  // Fill any shortfall from the bench, best first.
+  const spare: Record<Position, PickerPlayer[]> = { GKP: [], DEF: [], MID: [], FWD: [] };
+  for (const id of inSquad) {
+    if (seen.has(id)) continue;
+    const p = byId.get(id);
+    if (p) spare[p.position].push(p);
+  }
+  const xi: number[] = [];
+  for (const pos of ["GKP", "DEF", "MID", "FWD"] as Position[]) {
+    spare[pos].sort((a, b) => b.totalPoints - a.totalPoints);
+    const short = shape[pos] - kept[pos].length;
+    const fill = short > 0 ? spare[pos].slice(0, short).map((p) => p.id) : [];
+    xi.push(...kept[pos], ...fill);
+  }
+  return xi;
+}
+
 /** Given a squad and chosen XI, return the bench (non-starting picks). */
 export function bench(draft: SquadDraft, xi: number[]): number[] {
   return draft.picks.filter((id): id is number => id != null && !xi.includes(id));

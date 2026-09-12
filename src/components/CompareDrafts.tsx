@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { PlayerPhoto } from "@/components/PlayerPhoto";
 import { SuggestedSquadPitch } from "@/components/SuggestedSquadPitch";
 import { validateDraft } from "@/lib/drafts/validate";
-import { pickStartingXI, safeFormation, type Formation } from "@/lib/drafts/formation";
+import { resolveStartingXI, safeFormation, type Formation } from "@/lib/drafts/formation";
 import type { PickerPlayer, Position, SquadDraft } from "@/lib/drafts/types";
 import { cn } from "@/lib/utils";
 
@@ -76,7 +76,7 @@ const POS_TO_ELEMENT: Record<Position, 1 | 2 | 3 | 4> = {
  *  util when the body is this small. */
 function toPitchPayload(draft: SquadDraft, byId: Map<number, PickerPlayer>) {
   const formation: Formation = safeFormation(draft, byId, draft.formation as Formation | undefined);
-  const xi = new Set(byId.size ? pickStartingXI(draft, byId, formation) : []);
+  const xi = new Set(byId.size ? resolveStartingXI(draft, byId, formation) : []);
 
   const toResolved = (id: number) => {
     const p = byId.get(id);

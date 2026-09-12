@@ -17,8 +17,12 @@ export interface DraftValidation {
 export function validateDraft(draft: SquadDraft, byId: Map<number, PickerPlayer>): DraftValidation {
   const players = draft.picks.map((id) => (id == null ? null : byId.get(id) ?? null));
   const filled = players.filter((p) => p != null).length;
-  const totalCost = players.reduce((s, p) => s + (p?.price ?? 0), 0);
-  const inBudget = totalCost <= draft.budget / 10;
+  // Sum in tenths (FPL's own unit) — adding 15 decimal prices accumulates
+  // float error, which was enough to report a squad costing exactly its cap
+  // as over budget, and to print a bank of "-£0.0m".
+  const totalCostTenths = players.reduce((s, p) => s + (p ? Math.round(p.price * 10) : 0), 0);
+  const totalCost = totalCostTenths / 10;
+  const inBudget = totalCostTenths <= draft.budget;
 
   const clubCounts = new Map<string, number>();
   for (const p of players) {
