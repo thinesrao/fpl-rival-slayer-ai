@@ -33,13 +33,13 @@ export async function loadLatestPicks(teamId: number, bs: FplBootstrap): Promise
     try {
       return { gw, picks: await getPicks(teamId, gw) };
     } catch (err) {
-      // A 404 here just means "not published yet" — fall through to the
-      // previous gameweek. Anything else is a real failure.
-      if (err instanceof FplError && err.status === 404) {
-        lastError = err;
-        continue;
-      }
-      throw err;
+      // Every candidate but the last is a guess that the newer gameweek has
+      // published, so ANY failure on one falls through to the older one — not
+      // just a 404. In the minutes after a deadline FPL answers this endpoint
+      // with 503 "The game is being updated." while it settles, and treating
+      // that as fatal took the drafts seed and the wildcard optimiser down
+      // during exactly the window managers are looking at them.
+      lastError = err;
     }
   }
   throw lastError ?? new FplError(404, `No published picks for team ${teamId}.`);
