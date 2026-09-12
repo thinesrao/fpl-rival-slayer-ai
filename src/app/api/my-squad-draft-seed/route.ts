@@ -33,7 +33,9 @@ export async function GET(req: NextRequest) {
     const bs = await getBootstrap();
     const [{ gw, picks }, entry, history] = await Promise.all([
       loadLatestPicks(teamId, bs),
-      getEntry(teamId),
+      // Both are conveniences with a fallback below, and both 503 while FPL
+      // settles after a deadline. Neither is worth failing the request over.
+      getEntry(teamId).catch(() => null),
       getEntryHistory(teamId).catch(() => null),
     ]);
 
@@ -63,9 +65,14 @@ export async function GET(req: NextRequest) {
       value: nowCostById.get(p.element) ?? 0,
     }));
 
+    // Preference order: the entry's own figure, then the bank recorded
+    // against the picks we loaded (the same number, at that gameweek's
+    // deadline), then the history row. Each is a real reading, not a guess.
     let bank: number;
-    if (entry.last_deadline_bank != null) {
+    if (entry?.last_deadline_bank != null) {
       bank = entry.last_deadline_bank;
+    } else if (picks.entry_history?.bank != null) {
+      bank = picks.entry_history.bank;
     } else {
       const finished = history?.current.filter((c) => c.event <= gw) ?? [];
       bank = finished[finished.length - 1]?.bank ?? 0;

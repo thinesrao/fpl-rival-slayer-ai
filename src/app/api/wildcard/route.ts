@@ -67,10 +67,15 @@ async function spendingPower(
   bs: FplBootstrap,
 ): Promise<{ budget: number; bank: number; squadValue: number } | null> {
   try {
-    const [{ picks }, entry] = await Promise.all([loadLatestPicks(teamId, bs), getEntry(teamId)]);
+    const [{ picks }, entry] = await Promise.all([
+      loadLatestPicks(teamId, bs),
+      // The picks carry the same bank figure, so a 503 here (FPL settling
+      // after a deadline) is no reason to fail the whole suggestion.
+      getEntry(teamId).catch(() => null),
+    ]);
     const nowCostById = new Map(bs.elements.map((e) => [e.id, e.now_cost]));
     const squadValue = picks.picks.reduce((sum, p) => sum + (nowCostById.get(p.element) ?? 0), 0);
-    const bank = entry.last_deadline_bank ?? picks.entry_history?.bank ?? 0;
+    const bank = entry?.last_deadline_bank ?? picks.entry_history?.bank ?? 0;
     return { budget: bank + squadValue, bank, squadValue };
   } catch (err) {
     // A manager with no published picks yet (or a bad id) still gets a
