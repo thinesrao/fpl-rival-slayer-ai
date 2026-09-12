@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeftRight, ClipboardList, KeyRound, Loader2, Pencil, Plus, Share2, Trash2 } from "lucide-react";
+import { ArrowLeftRight, ClipboardList, KeyRound, Loader2, Pencil, Plus, Share2, Trash2, Wand2 } from "lucide-react";
 import { encodeDraft } from "@/lib/drafts/encode";
 import { CompareDrafts } from "@/components/CompareDrafts";
 import { toast } from "sonner";
@@ -11,10 +11,25 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DraftEditor } from "@/components/DraftEditor";
 import { FplSquadImport } from "@/components/FplSquadImport";
+import { ModelTrustBadge } from "@/components/ModelTrustBadge";
 import type { DraftSeed } from "@/lib/drafts/seed";
 import { emptyDraft, type PickerPlayer, type SquadDraft } from "@/lib/drafts/types";
 import { deleteDraft, loadDrafts } from "@/lib/drafts/storage";
 import { validateDraft } from "@/lib/drafts/validate";
+
+/** /api/wildcard returns a DraftSeed plus a note on how it was solved. */
+interface WildcardSeed extends DraftSeed {
+  optimiser: {
+    source: "fpl" | "model";
+    method: "search" | "exact";
+    approximate: boolean;
+    horizon: number[];
+    startingXp: number;
+    spentOfBudget: number;
+    candidatesSearched: number;
+    candidatesConsidered: number;
+  };
+}
 
 interface Props {
   teamId: number;
@@ -26,6 +41,8 @@ export function DraftsPanel({ teamId }: Props) {
   const [comparing, setComparing] = useState(false);
   const [seedLoading, setSeedLoading] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [wildcardLoading, setWildcardLoading] = useState(false);
+  const [wildcard, setWildcard] = useState<WildcardSeed["optimiser"] | null>(null);
 
   useEffect(() => {
     setDrafts(loadDrafts(teamId));
@@ -72,6 +89,25 @@ export function DraftsPanel({ teamId }: Props) {
       toast.error((e as Error).message);
     } finally {
       setSeedLoading(false);
+    }
+  };
+
+  const suggestWildcard = async () => {
+    setWildcardLoading(true);
+    try {
+      const res = await fetch(`/api/wildcard?teamId=${teamId}`);
+      const body = await res.json();
+      if (!res.ok) {
+        toast.error(body?.message ?? `Couldn't build a wildcard squad (${res.status})`);
+        return;
+      }
+      const seed = body as WildcardSeed;
+      setWildcard(seed.optimiser);
+      openSeededDraft(seed, `GW${seed.gw} wildcard (suggested)`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setWildcardLoading(false);
     }
   };
 
@@ -131,6 +167,14 @@ export function DraftsPanel({ teamId }: Props) {
           <Button size="sm" variant="outline" onClick={() => setImporting(true)}>
             <KeyRound className="mr-1 h-4 w-4" /> Import saved
           </Button>
+          <Button size="sm" variant="outline" onClick={suggestWildcard} disabled={wildcardLoading}>
+            {wildcardLoading ? (
+              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+            ) : (
+              <Wand2 className="mr-1 h-4 w-4 text-fut-gold" />
+            )}
+            {wildcardLoading ? "Optimising…" : "Suggest wildcard"}
+          </Button>
           <Button size="sm" onClick={createDraft} disabled={seedLoading}>
             {seedLoading ? (
               <Loader2 className="mr-1 h-4 w-4 animate-spin" />
@@ -142,6 +186,34 @@ export function DraftsPanel({ teamId }: Props) {
         </div>
       </CardHeader>
       <CardContent>
+        {wildcard && (
+          <div className="mb-3 rounded-md border border-fut-gold/30 bg-fut-gold/5 p-3 text-[11px] leading-relaxed">
+            <div className="mb-1 flex flex-wrap items-center gap-2">
+              <span className="font-display text-xs font-semibold uppercase tracking-tight">
+                Suggested wildcard
+              </span>
+              <Badge variant="outline" className="font-mono">
+                {wildcard.startingXp.toFixed(1)} xPts
+              </Badge>
+              <Badge variant="outline" className="font-mono">
+                £{(wildcard.spentOfBudget / 10).toFixed(1)}m spent
+              </Badge>
+              {/* The badge discloses that *our* model trails FPL's published
+                  xP. It has nothing to say about a suggestion built from
+                  FPL's own numbers, where the copy below is the disclosure. */}
+              {wildcard.source === "model" && <ModelTrustBadge />}
+            </div>
+            <p className="text-muted-foreground">
+              {wildcard.approximate ? "Near-best" : "Best"} legal 15 for GW{wildcard.horizon[0]},
+              picked from {wildcard.candidatesSearched} shortlisted out of{" "}
+              {wildcard.candidatesConsidered} players and weighing GW
+              {wildcard.horizon[0]}&ndash;{wildcard.horizon[wildcard.horizon.length - 1]} with the
+              nearest week counting most. Expected points come from{" "}
+              {wildcard.source === "fpl" ? "FPL's own published projection" : "this app's model"}.
+              It&apos;s a starting point, not a verdict &mdash; edit it and run the roast.
+            </p>
+          </div>
+        )}
         {drafts.length === 0 ? (
           <div className="rounded-md border border-dashed bg-muted/30 p-6 text-center">
             <p className="text-sm text-muted-foreground">

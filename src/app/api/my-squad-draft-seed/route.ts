@@ -11,17 +11,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import {
-  FplError,
-  currentEvent,
-  getBootstrap,
-  getEntry,
-  getEntryHistory,
-  getPicks,
-  nextEvent,
-} from "@/lib/fpl/client";
+import { FplError, getBootstrap, getEntry, getEntryHistory } from "@/lib/fpl/client";
+import { loadLatestPicks } from "@/lib/fpl/latest-picks";
 import { buildDraftSeed, type SeedPick } from "@/lib/drafts/seed";
-import type { FplBootstrap, FplPicksResponse } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,40 +21,6 @@ export const dynamic = "force-dynamic";
 const Query = z.object({
   teamId: z.coerce.number().int().positive(),
 });
-
-/** Gameweeks to try, newest first. The next gameweek only becomes readable
- *  once its deadline passes, and FPL can lag on flipping `is_current`, so we
- *  ask for it whenever the clock says it should be there. */
-function candidateGameweeks(bs: FplBootstrap): number[] {
-  const current = currentEvent(bs);
-  const next = nextEvent(bs);
-  const gws: number[] = [];
-  if (next && Date.now() >= new Date(next.deadline_time).getTime()) gws.push(next.id);
-  if (current) gws.push(current.id);
-  return gws.length > 0 ? [...new Set(gws)] : [1];
-}
-
-async function loadLatestPicks(
-  teamId: number,
-  bs: FplBootstrap,
-): Promise<{ gw: number; picks: FplPicksResponse }> {
-  const candidates = candidateGameweeks(bs);
-  let lastError: unknown = null;
-  for (const gw of candidates) {
-    try {
-      return { gw, picks: await getPicks(teamId, gw) };
-    } catch (err) {
-      // A 404 here just means "not published yet" — fall through to the
-      // previous gameweek. Anything else is a real failure.
-      if (err instanceof FplError && err.status === 404) {
-        lastError = err;
-        continue;
-      }
-      throw err;
-    }
-  }
-  throw lastError ?? new FplError(404, `No published picks for team ${teamId}.`);
-}
 
 export async function GET(req: NextRequest) {
   const parsed = Query.safeParse(Object.fromEntries(req.nextUrl.searchParams));
@@ -75,7 +33,9 @@ export async function GET(req: NextRequest) {
     const bs = await getBootstrap();
     const [{ gw, picks }, entry, history] = await Promise.all([
       loadLatestPicks(teamId, bs),
-      getEntry(teamId),
+      // Both are conveniences with a fallback below, and both 503 while FPL
+      // settles after a deadline. Neither is worth failing the request over.
+      getEntry(teamId).catch(() => null),
       getEntryHistory(teamId).catch(() => null),
     ]);
 
@@ -105,9 +65,14 @@ export async function GET(req: NextRequest) {
       value: nowCostById.get(p.element) ?? 0,
     }));
 
+    // Preference order: the entry's own figure, then the bank recorded
+    // against the picks we loaded (the same number, at that gameweek's
+    // deadline), then the history row. Each is a real reading, not a guess.
     let bank: number;
-    if (entry.last_deadline_bank != null) {
+    if (entry?.last_deadline_bank != null) {
       bank = entry.last_deadline_bank;
+    } else if (picks.entry_history?.bank != null) {
+      bank = picks.entry_history.bank;
     } else {
       const finished = history?.current.filter((c) => c.event <= gw) ?? [];
       bank = finished[finished.length - 1]?.bank ?? 0;
